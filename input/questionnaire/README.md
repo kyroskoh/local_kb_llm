@@ -1,23 +1,11 @@
 # Questionnaire module – training data
 
-Place **domain subfolders** here (e.g. `legal/`, `hr/`). Each domain folder contains:
+Training data can be **domain-based** (subfolders) or **flat** (all files here). Template and sample data can be PDF, DOCX, TXT, or EPUB (same as document_loader).
 
-- Supported documents: PDF, DOCX, TXT, EPUB
-- Optional `domain.json` (name, description)
-- Optional `questionnaire_template.json` (same format as filled questionnaire)
+**Domain-based:** place domain subfolders (e.g. `legal/`, `hr/`). Each can have:
+- Supported docs: PDF, DOCX, TXT, EPUB
+- Optional `domain.json`, `questionnaire_template.json`, or **template.pdf / template.docx** as the questionnaire template
 
-Example:
+**Flat:** put all PDF/DOCX/TXT/EPUB files directly here and add **domains.json** with `{"domains": ["legal", "hr", ...]}` so the app can still use domain labels for closest-related retrieval. Optionally add **template.pdf** (or template.docx) at this level.
 
-```
-input/questionnaire/
-├── legal/
-│   ├── domain.json
-│   ├── questionnaire_template.json
-│   ├── terms.pdf
-│   └── policy.docx
-└── hr/
-    ├── domain.json
-    └── handbook.pdf
-```
-
-Copy `domain.example.json` and `questionnaire_template.example.json` from `input/` into each domain folder as needed.
+**Add new training data:** use `add_training_text` / `save_training_document` or `add_and_save_training_example` to generate and sort new data into a domain (folder created if needed).

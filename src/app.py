@@ -8,7 +8,12 @@ from pathlib import Path
 
 from nicegui import ui
 
-from .input_domains import discover_domains, load_questionnaire_template
+from .input_domains import (
+    discover_domain_labels,
+    discover_domains,
+    load_questionnaire_template,
+    load_template_document,
+)
 from .knowledge_base import (
     DEFAULT_INPUT_DIR,
     KnowledgeBase,
@@ -26,14 +31,19 @@ DEFAULT_QUESTIONNAIRE_PLACEHOLDER = '{"name": "", "role": "", "agreed_terms": ""
 
 
 def _domain_select_options(kb: KnowledgeBase) -> list[tuple[str, str]]:
-    """Build (label, value) options for domain dropdown; Default plus loaded domains (skip "" as separate row)."""
+    """Build (label, value) options: Default plus loaded domains, or domain labels from domains.json when flat."""
     options: list[tuple[str, str]] = [("Default", "")]
     infos = discover_domains(QUESTIONNAIRE_INPUT_DIR)
-    for domain_id in kb.list_domains():
+    loaded = kb.list_domains()
+    for domain_id in loaded:
         if domain_id == "":
             continue
         label = next((d.display_name for d in infos if d.id == domain_id), domain_id)
         options.append((label, domain_id))
+    if not options or (len(loaded) == 1 and loaded[0] == ""):
+        for label in discover_domain_labels(QUESTIONNAIRE_INPUT_DIR):
+            if not any(v == label for _, v in options):
+                options.append((label, label))
     return options
 
 
@@ -265,12 +275,18 @@ def run_app(
                             if d.id == domain_id:
                                 domain_label = d.display_name
                                 break
+                        if not domain_label:
+                            domain_label = domain_id
+                    template_context = load_template_document(
+                        QUESTIONNAIRE_INPUT_DIR, domain_id
+                    )
                     try:
                         result = await generate_summary(
                             questionnaire,
                             kb=kb,
                             domain=domain_id,
                             domain_display_name=domain_label,
+                            template_document_context=template_context,
                             llm_model_path=llm_model_path,
                         )
                         sp.set_visibility(False)

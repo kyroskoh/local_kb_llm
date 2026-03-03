@@ -17,6 +17,7 @@ Questionnaire answers:
 
 Relevant context from documents (terms, policies, agreements):
 {kb_context}
+{template_context}
 {domain_focus}
 
 Produce exactly two short sections:
@@ -118,18 +119,20 @@ async def generate_summary(
     kb: KnowledgeBase | None = None,
     domain: str = "",
     domain_display_name: str = "",
+    template_document_context: str = "",
     llm_model_path: str | None = None,
 ) -> QuestionnaireSummaryResult:
     """
     Generate a summarized context from a filled questionnaire: what the user
     agreed to and the user's background. Uses the given domain's training data
-    when kb and domain are set.
+    (or closest-related when data is flat). Template can be PDF/DOCX/etc. for extra context.
 
     Args:
         questionnaire: Map of field names to answers (e.g. {"name": "Jane", "role": "Engineer"}).
-        kb: Optional knowledge base; if provided, relevant chunks from the domain are used.
-        domain: Domain id (e.g. "legal", "hr") to focus context; use "" for default/single collection.
+        kb: Optional knowledge base; if provided, relevant chunks are used (domain as query hint when flat).
+        domain: Domain id or label; biases retrieval to closest-related content when training data is not domain-based.
         domain_display_name: Optional display name for the domain in the prompt.
+        template_document_context: Optional text from a template document (PDF, DOCX, etc.) for the prompt.
         llm_model_path: Optional path to GGUF model; same semantics as KnowledgeBase.
 
     Returns:
@@ -139,17 +142,23 @@ async def generate_summary(
     kb_context = (
         _get_kb_context(kb, domain=domain) if kb else "(No knowledge base provided.)"
     )
+    template_context = (
+        f"Template or reference document:\n{template_document_context}"
+        if template_document_context
+        else ""
+    )
     domain_focus = _domain_focus_text(domain, domain_display_name)
 
     prompt = PromptTemplate(
         template=SUMMARY_TEMPLATE,
-        input_variables=["questionnaire_text", "kb_context", "domain_focus"],
+        input_variables=["questionnaire_text", "kb_context", "template_context", "domain_focus"],
     )
     llm = _create_llm(llm_model_path)
     chain = prompt | llm
     result = await chain.ainvoke({
         "questionnaire_text": questionnaire_text,
         "kb_context": kb_context,
+        "template_context": template_context,
         "domain_focus": domain_focus,
     })
     if hasattr(result, "content"):

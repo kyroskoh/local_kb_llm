@@ -12,7 +12,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 - **Embeddings**: OpenAI embeddings
 - **QA**: **Local GGUF by default** (e.g. Qwen2.5-0.5B-Instruct at `models/Qwen2.5-0.5B-Instruct-GGUF.gguf`); configurable via `LLM_MODEL_PATH` or fallback to OpenAI
 - **UI**: NiceGUI chat interface—upload documents, ask questions, and generate questionnaire summaries
-- **Training data (input/)**: Layout is **input/<module>/<domain>/** (e.g. `input/questionnaire/legal/`). Each module is an expertise area; each domain is a subfolder with PDF, DOCX, TXT, EPUB and optional `domain.json`, `questionnaire_template.json`. Load from **input/questionnaire/** for the questionnaire module.
+- **Training data (input/)**: Layout is **input/<module>/<domain>/** or flat **input/<module>/** with **domains.json**. Questionnaire template can be JSON or **PDF/DOCX/TXT/EPUB** (same as document_loader). Training data can be flat; the app uses the selected domain as a **query hint** for closest-related retrieval. **Generate and sort** new data with `add_training_text` / `save_training_document` or `add_and_save_training_example`.
 
 ## Setup
 
@@ -94,6 +94,18 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 
    - In the Chat tab, after the first upload, an **Add another document** control appears so you can extend the knowledge base.
 
+## Why two example config files in `input/`?
+
+| File | Purpose | When to use |
+|------|---------|-------------|
+| **domain.example.json** | **Per-domain** metadata: display name and description for **one** domain folder. Copy into each `input/<module>/<domain>/` (e.g. `input/questionnaire/legal/domain.json`). | **Domain-based layout**: you have subfolders like `legal/`, `hr/`; each can have its own `domain.json` so the UI shows "Legal" instead of "legal". |
+| **domains.example.json** | **Per-module** list of domain labels. Copy as `input/<module>/domains.json` (e.g. `input/questionnaire/domains.json`). Tells the app which domain options to show when there are **no** domain subfolders. | **Flat layout**: all training files live in the module root (no `legal/`, `hr/` subfolders); the app still offers domain choices and uses them as query hints for closest-related retrieval. |
+
+- Use **domain.example.json** when you organize data by domain folders.
+- Use **domains.example.json** when you keep all files in one folder but still want domain-based retrieval.
+
+See `input/README.md` and `PRD.md` for full context.
+
 ## Project layout
 
 ```
@@ -102,9 +114,12 @@ local_kb_llm/
 ├── requirements.txt
 ├── .env.example
 ├── README.md
+├── PRD.md               # Product requirements
 ├── input/               # Training data: input/<module>/<domain>/ (e.g. input/questionnaire/legal/)
-│   ├── questionnaire/   # Questionnaire module domains
-│   └── another_module/  # Placeholder for other modules
+│   ├── domain.example.json   # Copy into each domain folder (domain-based layout)
+│   ├── domains.example.json  # Copy as <module>/domains.json (flat layout)
+│   ├── questionnaire/
+│   └── another_module/
 ├── db/                  # Chroma persistence (created at first run)
 └── src/
     ├── __init__.py
@@ -148,15 +163,21 @@ import asyncio
 answer = asyncio.run(kb.ask("What is the main topic of the document?"))
 print(answer)
 
-# Load questionnaire module training data (input/questionnaire/<domain>/)
-from src.modules.questionnaire import generate_summary
-loaded = kb.init_from_directory("input/questionnaire")  # e.g. ["legal", "hr"] or [""]
+# Load questionnaire module (domain-based or flat)
+from src.modules.questionnaire import generate_summary, add_and_save_training_example
+loaded = kb.init_from_directory("input/questionnaire")  # ["legal", "hr"] or [""] if flat
 result = asyncio.run(generate_summary(
     {"name": "Jane", "role": "Engineer", "agreed_terms": "yes"},
     kb=kb, domain="legal", domain_display_name="Legal",
 ))
 print(result.agreed_summary)
 print(result.background_summary)
+
+# Add new training data and sort to a domain (saves to input/questionnaire/legal/ if filename given)
+add_and_save_training_example(
+    kb, "input/questionnaire", "legal", "New training text.", source="generated",
+    save_filename="generated_2024-01-15.txt",
+)
 ```
 
 ## Tech stack

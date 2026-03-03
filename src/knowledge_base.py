@@ -219,9 +219,36 @@ class KnowledgeBase:
         docs = parse_document(path, doc_type=doc_type)
         self.add_documents(docs, domain=domain)
 
-    def similarity_search(self, query: str, k: int = 4, domain: str = "") -> list[Document]:
-        """Return the k most similar document chunks from the given domain's collection."""
-        vs = self._get_vectorstore(domain)
+    def add_training_text(
+        self, domain: str, text: str, source: str = "generated"
+    ) -> None:
+        """
+        Add a single training text to the given domain's collection (creates
+        the collection if needed). Use to sort generated or new data into a domain.
+        """
+        doc = Document(page_content=text.strip(), metadata={"source": source})
+        self.add_documents([doc], domain=domain)
+
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        domain: str = "",
+        domain_as_query_hint: bool = True,
+    ) -> list[Document]:
+        """
+        Return the k most similar document chunks. Uses the domain's collection
+        when present; if training data is flat (single collection), uses domain
+        as a query prefix to get closest-related content.
+        """
+        resolved_domain = (
+            domain
+            if domain and domain in self._vectorstores
+            else self._resolve_domain("")
+        )
+        if domain_as_query_hint and domain and domain != resolved_domain:
+            query = f"{domain} {query}".strip()
+        vs = self._get_vectorstore(resolved_domain)
         return vs.similarity_search(query=query, k=k)
 
     async def ask(self, query: str, k: int = 4, domain: str = "") -> str:

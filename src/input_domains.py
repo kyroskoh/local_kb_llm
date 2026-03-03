@@ -191,3 +191,99 @@ def load_questionnaire_template(
     if not field_ids:
         return None
     return QuestionnaireTemplate(field_ids=field_ids, labels=labels)
+
+
+def load_template_document(
+    input_dir: str | Path, domain_id: str
+) -> str:
+    """
+    Load questionnaire template as a document (PDF, DOCX, TXT, EPUB) if present.
+    Looks for template.* or questionnaire_template.* with supported extension
+    in <input_dir>/<domain_id>/. Use for summary context when template and
+    sample training data are provided in doc format.
+
+    Returns:
+        Concatenated text content of the template document, or empty string if not found.
+    """
+    from .document_loader import parse_document
+
+    root = Path(input_dir)
+    domain_path = root / domain_id
+    if domain_path.is_dir():
+        for base in TEMPLATE_DOC_BASES:
+        for ext in TEMPLATE_DOC_EXTENSIONS:
+            candidate = domain_path / f"{base}{ext}"
+            if candidate.is_file():
+                try:
+                    docs = parse_document(str(candidate))
+                    if docs:
+                        return "\n\n".join(d.page_content.strip() for d in docs if d.page_content)
+                except Exception:
+                    continue
+    # Module-level template (flat or when no template in domain): input/<module>/template.pdf
+    for base in TEMPLATE_DOC_BASES:
+        for ext in TEMPLATE_DOC_EXTENSIONS:
+            candidate = root / f"{base}{ext}"
+            if candidate.is_file():
+                try:
+                    docs = parse_document(str(candidate))
+                    if docs:
+                        return "\n\n".join(d.page_content.strip() for d in docs if d.page_content)
+                except Exception:
+                    continue
+    return ""
+
+
+def discover_domain_labels(input_dir: str | Path) -> list[str]:
+    """
+    Domain labels for the module: from subfolders (domain-based) or from
+    domains.json (flat training data). Used for retrieval and UI.
+
+    Returns:
+        List of domain ids/labels. Empty if neither subfolders nor domains.json exist.
+    """
+    root = Path(input_dir)
+    if not root.is_dir():
+        return []
+    domains_from_folders = discover_domains(root)
+    if domains_from_folders:
+        return [d.id for d in domains_from_folders]
+    config_path = root / DOMAINS_LIST_FILENAME
+    if not config_path.is_file():
+        return []
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+    if isinstance(data, dict) and "domains" in data:
+        raw = data["domains"]
+    elif isinstance(data, list):
+        raw = data
+    else:
+        return []
+    if not isinstance(raw, list):
+        return []
+    return [str(x).strip() for x in raw if str(x).strip()]
+
+
+def save_training_document(
+    module_input_dir: str | Path,
+    domain: str,
+    content: str,
+    filename: str,
+) -> Path:
+    """
+    Save generated or new training content to the module's domain folder
+    so it can be reloaded later. Creates the domain folder if needed.
+    Use for .txt; caller can choose filename (e.g. generated_2024-01-15.txt).
+
+    Returns:
+        Path to the written file.
+    """
+    root = Path(module_input_dir)
+    domain_path = root / domain
+    domain_path.mkdir(parents=True, exist_ok=True)
+    path = domain_path / filename
+    path.write_text(content.strip(), encoding="utf-8")
+    return path
