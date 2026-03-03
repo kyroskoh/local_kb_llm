@@ -24,13 +24,13 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 {kb_context}
 
 Story structure (your reply must be only this—no introduction, no "I am an AI/assistant", no description of the task):
+- Output format: One continuous paragraph of prose only. No headings, no bullet points, no lists, no line breaks between sentences, no numbers, no repetition of topic names or keypoint labels. Do not echo the keypoints or theme data—weave the ideas into flowing sentences only. Start with the literal "(Name)" (not "He/She").
 - (Name) is the participant (e.g. Lyon). The whole story is about (Name) in the third person. Never use I, me, my, we, or our.
 - First sentence: "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]."
-- Next 2–4 sentences only: Refer to (Name) with third-person pronouns only—e.g. if (Name) is male: "He said that...", "his priority", "he is proud"; if female: "She shared that...", "her view". The story is (Name)'s POV reported by someone else, so use he/his/him or she/her throughout. Use "(Location of Session)" only if relevant.
-- Example: "(Name) shared about safety. He said that security is his priority." Wrong: "I am proud." Right: "He is proud." or "She said she is proud."
-- Do not repeat the same phrase or sentence structure. One short paragraph only (about 2–5 sentences total).
+- Next 2–4 sentences: Refer to (Name) with third-person pronouns (he/his or she/her). Use "(Location of Session)" only if relevant. One short paragraph only (2–5 sentences total).
+- Example: "(Name) shared about safety. He said that security is his priority." Wrong: "(He/She) shared..."; wrong: listing keypoints or topic names. Right: one block of prose.
 
-Your reply must be only the story paragraph, starting with "(Name) shared about" or "(Name) shared of how". No I/me/my/we/our—only he/she/his/her (or they/their) for the participant. Do not repeat lines or phrases."""
+Your reply must be exactly one paragraph of prose, starting with "(Name) shared about" or "(Name) shared of how". No headings, no lists, no echoed keypoints—only the story text."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
