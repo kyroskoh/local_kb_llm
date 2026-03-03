@@ -14,21 +14,20 @@ from ...knowledge_base import KnowledgeBase, _create_llm
 from .breakout_extract import BreakoutExtract, ThemeBlock, TopicKeypoints
 
 
-STORY_TEMPLATE = """You are writing a short narrative story for a report, based on a breakout group discussion.
+STORY_TEMPLATE = """Assume the point of view of a breakout participant based on the theme, question, and keypoints below. Write one short narrative story for a report.
 
 Theme: {theme_title}
 Question asked: {question}
 Topic (category): {topic_name}
-Keypoints (participants' answers; mention count shows how often the point was raised—use it to justify confidence or emphasis in the story):
+Keypoints (participants' answers; mention count = how often raised—use for emphasis):
 {keypoints}
 {kb_context}
 
-Story structure (follow this pattern exactly):
-- First sentence: Start with "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]." Do not start with "I am" or "I"—always use the (Name) placeholder so the story is attributed to the participant.
-- Next 2–4 sentences: Describe the participant's view in reported form (e.g. "He said that...", "When traveling, she shared that...", "Globally, ..."). Keep the participant's POV but attribute it to (Name), not "I". Use "(Location of Session)" only if relevant.
-- Output: One paragraph only. No headings, no instructions, no meta-commentary—only the story text.
+Story structure (your reply must be only this—no introduction, no "I am an AI/assistant", no description of the task):
+- First sentence: "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]."
+- Next 2–4 sentences: Stay in that person's POV but use reported form with consistent third-person pronouns. Choose one set and use it throughout: either he/his/him (e.g. "He said that...", "his experience") or she/her (e.g. "She shared that...", "her view"). Do not use "I", "me", or "my" after the first sentence—only he/she/his/her (or they/their) so the story reads as about (Name). Use "(Location of Session)" only if relevant.
 
-Task: Reply with a single paragraph that follows the structure above. Do not start with "I" or "I am". Do not repeat this structure or any instructions in your reply."""
+Your reply must be only the story paragraph, starting with "(Name) shared about" or "(Name) shared of how". Do not say who you are; do not describe the task or theme—only the story text."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
