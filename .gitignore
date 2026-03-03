@@ -1,0 +1,26 @@
+# Environment and secrets
+.env
+.venv/
+venv/
+env/
+
+# Chroma DB
+db/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

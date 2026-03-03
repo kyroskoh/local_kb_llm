@@ -1,0 +1,7 @@
+{
+  "fields": [
+    {"id": "name", "label": "Full name"},
+    {"id": "role", "label": "Role or title"},
+    {"id": "agreed_terms", "label": "Agreed to terms (yes/no)"}
+  ]
+}

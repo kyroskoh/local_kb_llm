@@ -1,0 +1,23 @@
+# Local Knowledge Base with LLMs (LangChain + Chroma + OpenAI)
+# See: https://cellsummer.github.io/views/2023-07-23-Build-Local_Knowledge-Base-With-LLMs.html
+
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-chroma>=0.1.0
+langchain-openai>=0.2.0
+langchain-text-splitters>=0.3.0
+chromadb>=0.4.0
+
+# Document loaders
+pypdf>=4.0.0
+docx2txt>=0.8
+unstructured[epub]>=0.16.0
+
+# UI
+nicegui>=1.4.0
+
+# Local LLM (GGUF via llama.cpp)
+llama-cpp-python>=0.3.0
+
+# Config
+python-dotenv>=1.0.0
