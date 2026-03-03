@@ -73,6 +73,30 @@ def _parse_hf_spec(path: str) -> tuple[str, str | None] | None:
     return rest.strip(), None
 
 
+def _default_gguf_from_repo(repo_id: str) -> str:
+    """Pick a GGUF filename from a Hugging Face repo when LLM_MODEL_PATH is hf:repo_id without :filename."""
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        files = api.list_repo_files(repo_id)
+        gguf = [f for f in files if f.endswith(".gguf")]
+        if not gguf:
+            raise RuntimeError(
+                f"No .gguf file found in repo {repo_id!r}. "
+                "Specify one with LLM_MODEL_PATH=hf:repo_id:filename.gguf"
+            )
+        # Prefer a small quant (q4_k_m) if present, else first
+        preferred = [f for f in gguf if "q4_k_m" in f or "q4k_m" in f]
+        return preferred[0] if preferred else gguf[0]
+    except Exception as e:
+        if isinstance(e, RuntimeError):
+            raise
+        raise RuntimeError(
+            f"Could not list files in repo {repo_id!r}: {e}. "
+            "Set LLM_MODEL_PATH=hf:repo_id:filename.gguf with an explicit filename."
+        ) from e
+
+
 def _resolve_llm_path(config: str | None) -> str | None:
     """
     Resolve LLM path from config. Returns path string to use, or None for OpenAI.
@@ -92,7 +116,7 @@ def _resolve_llm_path(config: str | None) -> str | None:
 class _LlamaChatModel(BaseChatModel):
     """LangChain chat model wrapping llama-cpp-python Llama using create_chat_completion."""
 
-    _llm: Any  # Llama instance
+    llama_llm: Any  # Llama instance (public name so Pydantic v2 does not treat as private)
     temperature: float = 0.2
     max_tokens: int = 512
 
@@ -119,7 +143,7 @@ class _LlamaChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         openai_messages = [self._message_to_dict(m) for m in messages]
-        response = self._llm.create_chat_completion(
+        response = self.llama_llm.create_chat_completion(
             messages=openai_messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
@@ -145,6 +169,8 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
     hf = _parse_hf_spec(path)
     if hf is not None:
         repo_id, filename = hf
+        if not filename:
+            filename = _default_gguf_from_repo(repo_id)
         try:
             from llama_cpp import Llama
         except ImportError as e:
@@ -153,15 +179,18 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
                 "Install with: pip install -r requirements-llm.txt"
             ) from e
         try:
-            if filename:
-                llm = Llama.from_pretrained(repo_id=repo_id, filename=filename)
-            else:
-                llm = Llama.from_pretrained(repo_id=repo_id)
-            return _LlamaChatModel(_llm=llm, temperature=0.2, max_tokens=512)
+            # n_ctx must fit prompt + completion; story prompts can exceed 512 tokens
+            llm = Llama.from_pretrained(
+                repo_id=repo_id,
+                filename=filename,
+                n_ctx=2048,
+            )
+            return _LlamaChatModel(llama_llm=llm, temperature=0.2, max_tokens=512)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to load Hugging Face model {repo_id!r}: {e}. "
-                "Ensure llama-cpp-python is installed (pip install -r requirements-llm.txt) and network is available for download."
+                f"Failed to load Hugging Face model {repo_id!r} (file {filename!r}): {e}. "
+                "Ensure llama-cpp-python is installed (pip install -r requirements-llm.txt) and network is available. "
+                "To pick a specific file use: LLM_MODEL_PATH=hf:repo_id:filename.gguf"
             ) from e
 
     if Path(path).exists():

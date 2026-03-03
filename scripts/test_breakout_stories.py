@@ -8,14 +8,26 @@ OPENAI_API_KEY is only required if you want to load training data (embeddings) f
 Usage:
   python scripts/test_breakout_stories.py "input/questionnaire/CSS Report_2025_10_01_Grp 1 Lyon.docx"
   python scripts/test_breakout_stories.py path/to/report.docx --max 2
+  python scripts/test_breakout_stories.py path/to/report.docx --theme 1
 """
 import asyncio
+import logging
 import os
 import sys
+import warnings
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(levelname)s: %(name)s: %(message)s",
+    stream=sys.stderr,
+)
 
 # Reduce Hugging Face hub noise on Windows (symlinks warning)
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+# Suppress common HF/hub warnings during script run
+warnings.filterwarnings("ignore", message=".*unauthenticated requests.*HF Hub.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*local_dir_use_symlinks.*deprecated.*", category=UserWarning)
 
 # Project root and load .env first (same as main.py)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +49,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.app import QUESTIONNAIRE_INPUT_DIR
 from src.knowledge_base import KnowledgeBase
+from src.modules.questionnaire.breakout_extract import BreakoutExtract
 from src.modules.questionnaire import extract_breakout_keypoints, generate_stories_from_breakout
 
 
@@ -59,15 +72,26 @@ def _resolve_llm_path_from_env() -> str | None:
 
 def _main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python scripts/test_breakout_stories.py <report.docx> [--max N]", file=sys.stderr)
+        print(
+            "Usage: python scripts/test_breakout_stories.py <report.docx> [--max N] [--theme N]",
+            file=sys.stderr,
+        )
         sys.exit(1)
     docx_path = Path(sys.argv[1])
     max_stories = None
+    theme_only = None
     if "--max" in sys.argv:
         idx = sys.argv.index("--max")
         if idx + 1 < len(sys.argv):
             try:
                 max_stories = int(sys.argv[idx + 1])
+            except ValueError:
+                pass
+    if "--theme" in sys.argv:
+        idx = sys.argv.index("--theme")
+        if idx + 1 < len(sys.argv):
+            try:
+                theme_only = int(sys.argv[idx + 1])
             except ValueError:
                 pass
     if not docx_path.is_file():
@@ -81,6 +105,15 @@ def _main() -> None:
     if not extract.themes:
         print("No themes found in Breakout Group Discussion section.", file=sys.stderr)
         sys.exit(1)
+    if theme_only is not None:
+        themes_subset = [t for t in extract.themes if t.theme_number == theme_only]
+        if not themes_subset:
+            print(
+                f"No theme with number {theme_only}. Available: {[t.theme_number for t in extract.themes]}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        extract = BreakoutExtract(themes=themes_subset)
     _load_env()
     llm_model_path = _resolve_llm_path_from_env()
     using_local_embeddings = (os.environ.get("EMBEDDING_MODEL") or "").strip().lower() not in ("", "openai")

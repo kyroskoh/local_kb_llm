@@ -2,32 +2,47 @@
 Generate short narrative stories from Breakout Group Discussion keypoints.
 Uses the same LLM and optional KB (training data) as the questionnaire module.
 """
+import logging
 from dataclasses import dataclass
 
 from langchain_core.prompts import PromptTemplate
+
+logger = logging.getLogger(__name__)
 
 from ...knowledge_base import KnowledgeBase, _create_llm
 
 from .breakout_extract import BreakoutExtract, ThemeBlock, TopicKeypoints
 
 
-STORY_TEMPLATE = """You are writing a short narrative story for a report, based on discussion keypoints from a breakout session.
+STORY_TEMPLATE = """You are writing a short narrative story for a report, based on a breakout group discussion.
 
 Theme: {theme_title}
-Question discussed: {question}
-Topic: {topic_name}
-Keypoints from the discussion:
+Question asked: {question}
+Topic (category): {topic_name}
+Keypoints (participants' answers; mention count shows how often the point was raised—use it to justify confidence or emphasis in the story):
 {keypoints}
 {kb_context}
 
-Write one short paragraph (2–4 sentences) in first person, as if a participant is sharing their view. Use "(Name)" and "(Location of Session)" as placeholders for the participant and session. Match the tone and style of the keypoints. Output only the story paragraph, no headings."""
+Story structure (follow this pattern exactly):
+- First sentence: Start with "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]."
+- Next 2–4 sentences: Continue in first person or third person as appropriate, describing the participant's experience or view. Weave in the keypoints naturally (e.g. "When ...", "She said that ...", "Globally, ..."). Use "(Location of Session)" only if the session location is relevant.
+- Output: One paragraph only. No headings, no instructions, no meta-commentary—only the story text.
+
+Task: Reply with a single paragraph that follows the structure above. Do not repeat this structure or any instructions in your reply."""
+
+# Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
+MIN_STORY_LENGTH = 100
 
 
 def _format_keypoints(topic: TopicKeypoints) -> str:
-    """Format topic keypoints for the prompt."""
+    """Format topic keypoints for the prompt; include mention count when present (confidence/rating)."""
+    header = topic.name
+    if topic.mentions is not None:
+        header = f"{topic.name} ({topic.mentions} mentions)"
     if not topic.keypoints:
-        return topic.name
-    return "\n".join(f"- {k}" for k in topic.keypoints)
+        return header
+    lines = [f"- {k}" for k in topic.keypoints]
+    return header + "\n" + "\n".join(lines)
 
 
 def _get_kb_context(kb: KnowledgeBase, theme_title: str, topic_name: str, keypoints: list[str], domain: str = "", k: int = 3) -> str:
@@ -92,14 +107,34 @@ async def _generate_one_story(
             "keypoints": keypoints_str,
             "kb_context": kb_context,
         })
-        text = out.content if hasattr(out, "content") else str(out)
+        text = (out.content if hasattr(out, "content") else str(out)).strip()
+        if len(text) < MIN_STORY_LENGTH:
+            logger.warning(
+                "Story too short (%d chars) for theme %s topic %s; treating as failed.",
+                len(text),
+                theme.title,
+                topic.name,
+            )
+            return StoryResult(
+                theme_number=theme.theme_number,
+                theme_title=theme.title,
+                topic_name=topic.name,
+                story_text="[Story generation failed.]",
+            )
         return StoryResult(
             theme_number=theme.theme_number,
             theme_title=theme.title,
             topic_name=topic.name,
-            story_text=text.strip(),
+            story_text=text,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "Story generation failed for theme %s topic %s: %s",
+            theme.title,
+            topic.name,
+            e,
+            exc_info=True,
+        )
         return StoryResult(
             theme_number=theme.theme_number,
             theme_title=theme.title,
@@ -137,7 +172,11 @@ async def generate_stories_from_breakout(
     results: list[StoryResult] = []
     count = 0
     for theme in extract.themes:
-        for topic in theme.topics:
+        topics = theme.topics
+        if not topics:
+            # Fallback: no numbered topics parsed (e.g. DOCX format differs); generate one story per theme
+            topics = [TopicKeypoints(name=theme.title, keypoints=[theme.question] if theme.question else [])]
+        for topic in topics:
             if max_stories is not None and count >= max_stories:
                 return results
             result = await _generate_one_story(chain, theme, topic, kb, domain)
