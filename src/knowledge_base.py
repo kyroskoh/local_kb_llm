@@ -119,6 +119,7 @@ class _LlamaChatModel(BaseChatModel):
     llama_llm: Any  # Llama instance (public name so Pydantic v2 does not treat as private)
     temperature: float = 0.2
     max_tokens: int = 512
+    repeat_penalty: float = 1.2  # Reduce repetitive phrasing (e.g. in story generation)
 
     class Config:
         arbitrary_types_allowed = True
@@ -147,6 +148,7 @@ class _LlamaChatModel(BaseChatModel):
             messages=openai_messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            repeat_penalty=self.repeat_penalty,
         )
         content = ""
         if response and "choices" in response and response["choices"]:
