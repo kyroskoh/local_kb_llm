@@ -36,6 +36,8 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
    pip install -r requirements.txt
    ```
 
+   **Optional — local GGUF LLM:** To use a local model (e.g. Qwen GGUF), install `pip install -r requirements-llm.txt`. On some Windows setups (e.g. ArcGIS Pro Python) this can fail to build from source; you can skip it and use the OpenAI fallback, or use a [python.org](https://www.python.org/downloads/) Python in a fresh venv.
+
 4. **Configure OpenAI API key**
 
    Copy the example env file and set your key:
@@ -58,6 +60,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
    QA uses a **local GGUF model by default**. Place the model at `models/Qwen2.5-0.5B-Instruct-GGUF.gguf` (or set `LLM_MODEL_PATH` in `.env` to another path).
 
    - **Default**: Download from [Hugging Face – Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF) (e.g. `q4_k_m` or `q8_0`), save as `models/Qwen2.5-0.5B-Instruct-GGUF.gguf`. If the file is missing, the app falls back to OpenAI for QA.
+   - **Hugging Face (auto-download)**: In `.env`, set `LLM_MODEL_PATH=hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF` or `hf:repo_id:filename.gguf` to use `Llama.from_pretrained()` and `create_chat_completion` (requires `pip install -r requirements-llm.txt`).
    - **Custom path**: In `.env`, set `LLM_MODEL_PATH=/path/to/your.gguf`.
    - **Use OpenAI for QA**: In `.env`, set `LLM_MODEL_PATH=openai` or `LLM_MODEL_PATH=`.
 

@@ -1,0 +1,4 @@
+# Optional: local GGUF LLM (llama.cpp). Skip if you use OpenAI only or if build fails.
+# On Windows, building from source may fail (e.g. packaging/scikit-build mismatch);
+# use a pre-built wheel from PyPI if available for your Python version, or rely on OpenAI fallback.
+llama-cpp-python>=0.3.0

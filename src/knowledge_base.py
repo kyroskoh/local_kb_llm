@@ -1,13 +1,17 @@
 """
 Knowledge base: Chroma vector store + OpenAI embeddings + QA chain.
-Supports OpenAI (ChatOpenAI) or a local GGUF model (ChatLlamaCpp) for the LLM.
+Supports OpenAI (ChatOpenAI), local GGUF (ChatLlamaCpp), or Hugging Face
+(Llama.from_pretrained + create_chat_completion) for the LLM.
 """
 from pathlib import Path
+from typing import Any
 
 import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_openai import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
 
@@ -28,6 +32,21 @@ DEFAULT_LLM_MODEL_PATH = _PROJECT_ROOT / "models" / "Qwen2.5-0.5B-Instruct-GGUF.
 
 # Sentinel: set LLM_MODEL_PATH to this to force OpenAI instead of local GGUF
 USE_OPENAI = "openai"
+OPENAI_QA_MODEL = "gpt-3.5-turbo"
+
+# Prefix for Hugging Face: LLM_MODEL_PATH=hf:repo_id or hf:repo_id:filename
+HF_PREFIX = "hf:"
+
+
+def _parse_hf_spec(path: str) -> tuple[str, str | None] | None:
+    """If path is hf:repo_id or hf:repo_id:filename, return (repo_id, filename or None)."""
+    if not path.startswith(HF_PREFIX):
+        return None
+    rest = path[len(HF_PREFIX) :].strip()
+    if ":" in rest:
+        repo_id, filename = rest.split(":", 1)
+        return repo_id.strip(), filename.strip() or None
+    return rest.strip(), None
 
 
 def _resolve_llm_path(config: str | None) -> str | None:
@@ -46,10 +65,74 @@ def _resolve_llm_path(config: str | None) -> str | None:
     return str(DEFAULT_LLM_MODEL_PATH)
 
 
+class _LlamaChatModel(BaseChatModel):
+    """LangChain chat model wrapping llama-cpp-python Llama using create_chat_completion."""
+
+    _llm: Any  # Llama instance
+    temperature: float = 0.2
+    max_tokens: int = 512
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def _message_to_dict(self, msg: BaseMessage) -> dict[str, str]:
+        role = "user"
+        if hasattr(msg, "type"):
+            if msg.type == "human":
+                role = "user"
+            elif msg.type == "ai":
+                role = "assistant"
+            elif msg.type == "system":
+                role = "system"
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        return {"role": role, "content": content}
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        openai_messages = [self._message_to_dict(m) for m in messages]
+        response = self._llm.create_chat_completion(
+            messages=openai_messages,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        content = ""
+        if response and "choices" in response and response["choices"]:
+            choice = response["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                content = choice["message"]["content"] or ""
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+
+    @property
+    def _llm_type(self) -> str:
+        return "llama_cpp_chat"
+
+
 def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
-    """Create the chat model: local GGUF if path exists, otherwise OpenAI."""
+    """Create the chat model: Hugging Face, local GGUF, or OpenAI."""
     path = _resolve_llm_path(llm_model_path)
-    if path and Path(path).exists():
+    if not path:
+        return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
+
+    hf = _parse_hf_spec(path)
+    if hf is not None:
+        repo_id, filename = hf
+        try:
+            from llama_cpp import Llama
+
+            if filename:
+                llm = Llama.from_pretrained(repo_id=repo_id, filename=filename)
+            else:
+                llm = Llama.from_pretrained(repo_id=repo_id)
+            return _LlamaChatModel(_llm=llm, temperature=0.2, max_tokens=512)
+        except Exception:
+            return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
+
+    if Path(path).exists():
         from langchain_community.chat_models.llamacpp import ChatLlamaCpp
 
         return ChatLlamaCpp(
@@ -59,7 +142,7 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
             max_tokens=512,
             verbose=False,
         )
-    return ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
+    return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
 
 
 class KnowledgeBase:
