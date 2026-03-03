@@ -36,24 +36,22 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
    pip install -r requirements.txt
    ```
 
-   **Optional — local GGUF LLM:** To use a local model (e.g. Qwen GGUF), install `pip install -r requirements-llm.txt`. On some Windows setups (e.g. ArcGIS Pro Python) this can fail to build from source; you can skip it and use the OpenAI fallback, or use a [python.org](https://www.python.org/downloads/) Python in a fresh venv.
+   **Optional — local GGUF LLM:** To use a local model (e.g. Qwen GGUF), install `pip install -r requirements-llm.txt`. On Windows, building from source requires [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (Desktop development with C++); or use Python 3.11/3.12 where a pre-built wheel may be available. You can skip it and set `LLM_MODEL_PATH=openai` to use OpenAI for QA.
 
-4. **Configure OpenAI API key**
+4. **Configure environment**
 
-   Copy the example env file and set your key:
+   Copy the example env file:
 
    ```bash
    copy .env.example .env   # Windows
    # cp .env.example .env   # macOS/Linux
    ```
 
-   Edit `.env` and set:
+   To run **without the OpenAI API** (local embeddings + local LLM), set in `.env`:
+   - `EMBEDDING_MODEL=local` (uses sentence-transformers; install with `pip install sentence-transformers` if not already in requirements)
+   - `LLM_MODEL_PATH` to your local GGUF path or `hf:repo_id`
 
-   ```
-   OPENAI_API_KEY=sk-your-key-here
-   ```
-
-   Get an API key at [OpenAI API keys](https://platform.openai.com/api-keys).
+   To use OpenAI for embeddings or QA, set `OPENAI_API_KEY=sk-your-key-here` and optionally `EMBEDDING_MODEL=openai` or `LLM_MODEL_PATH=openai`. Get a key at [OpenAI API keys](https://platform.openai.com/api-keys).
 
 5. **LLM for QA (configurable)**
 
@@ -64,7 +62,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
    - **Custom path**: In `.env`, set `LLM_MODEL_PATH=/path/to/your.gguf`.
    - **Use OpenAI for QA**: In `.env`, set `LLM_MODEL_PATH=openai` or `LLM_MODEL_PATH=`.
 
-   Embeddings always use OpenAI.
+   **Embeddings:** Set `EMBEDDING_MODEL=local` in `.env` to use a local model (sentence-transformers); unset or `openai` uses OpenAI.
 
 ## Usage
 

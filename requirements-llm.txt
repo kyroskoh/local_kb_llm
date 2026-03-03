@@ -1,4 +1,8 @@
 # Optional: local GGUF LLM (llama.cpp). Skip if you use OpenAI only or if build fails.
-# On Windows, building from source may fail (e.g. packaging/scikit-build mismatch);
-# use a pre-built wheel from PyPI if available for your Python version, or rely on OpenAI fallback.
+# Windows: building from source needs Visual Studio Build Tools (C++); or use Python 3.11/3.12
+# for a pre-built wheel. Otherwise set LLM_MODEL_PATH=openai and skip this file.
 llama-cpp-python>=0.3.0
+
+# Local embeddings (for EMBEDDING_MODEL=local; avoids OpenAI for indexing training data)
+langchain-huggingface>=0.1.0
+sentence-transformers>=2.2.0

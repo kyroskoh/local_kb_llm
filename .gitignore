@@ -7,6 +7,14 @@ env/
 # Chroma DB
 db/
 
+# Input: training data (keep READMEs and *.example.*)
+input/**/*.docx
+input/**/*.pdf
+input/**/*.txt
+input/**/*.epub
+input/**/domains.json
+input/**/domain.json
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,14 +1,16 @@
 """
-Knowledge base: Chroma vector store + OpenAI embeddings + QA chain.
+Knowledge base: Chroma vector store + configurable embeddings (OpenAI or local) + QA chain.
 Supports OpenAI (ChatOpenAI), local GGUF (ChatLlamaCpp), or Hugging Face
 (Llama.from_pretrained + create_chat_completion) for the LLM.
 """
+import os
 from pathlib import Path
 from typing import Any
 
 import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -36,6 +38,28 @@ OPENAI_QA_MODEL = "gpt-3.5-turbo"
 
 # Prefix for Hugging Face: LLM_MODEL_PATH=hf:repo_id or hf:repo_id:filename
 HF_PREFIX = "hf:"
+
+# Default local embedding model (no API key); set EMBEDDING_MODEL=openai to use OpenAI
+DEFAULT_LOCAL_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def _create_embeddings() -> Embeddings:
+    """Create embeddings from env: EMBEDDING_MODEL=openai or unset → OpenAI; else local HuggingFace model."""
+    model = (os.environ.get("EMBEDDING_MODEL") or "").strip()
+    if model.lower() in ("", "openai"):
+        return OpenAIEmbeddings()
+    name = DEFAULT_LOCAL_EMBEDDING_MODEL if model.lower() == "local" else model
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+        return HuggingFaceEmbeddings(
+            model_name=name,
+            model_kwargs={"device": "cpu"},
+        )
+    except ImportError as e:
+        raise ImportError(
+            "Local embeddings require langchain-huggingface and sentence-transformers. "
+            "Install with: pip install langchain-huggingface sentence-transformers"
+        ) from e
 
 
 def _parse_hf_spec(path: str) -> tuple[str, str | None] | None:
@@ -123,14 +147,22 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
         repo_id, filename = hf
         try:
             from llama_cpp import Llama
-
+        except ImportError as e:
+            raise RuntimeError(
+                "LLM_MODEL_PATH is set to a Hugging Face model (hf:...) but llama-cpp-python is not installed. "
+                "Install with: pip install -r requirements-llm.txt"
+            ) from e
+        try:
             if filename:
                 llm = Llama.from_pretrained(repo_id=repo_id, filename=filename)
             else:
                 llm = Llama.from_pretrained(repo_id=repo_id)
             return _LlamaChatModel(_llm=llm, temperature=0.2, max_tokens=512)
-        except Exception:
-            return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load Hugging Face model {repo_id!r}: {e}. "
+                "Ensure llama-cpp-python is installed (pip install -r requirements-llm.txt) and network is available for download."
+            ) from e
 
     if Path(path).exists():
         from langchain_community.chat_models.llamacpp import ChatLlamaCpp
@@ -146,7 +178,7 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
 
 
 class KnowledgeBase:
-    """Local knowledge base backed by Chroma and OpenAI embeddings."""
+    """Local knowledge base backed by Chroma and configurable embeddings (OpenAI or local)."""
 
     def __init__(
         self,
@@ -172,8 +204,8 @@ class KnowledgeBase:
             settings=chromadb.Settings(anonymized_telemetry=False),
         )
 
-    def _embeddings(self) -> OpenAIEmbeddings:
-        return OpenAIEmbeddings()
+    def _embeddings(self) -> Embeddings:
+        return _create_embeddings()
 
     def _collection_name_for_domain(self, domain: str) -> str:
         """Full Chroma collection name for a domain (empty string = default)."""

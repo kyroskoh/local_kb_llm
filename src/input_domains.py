@@ -211,15 +211,15 @@ def load_template_document(
     domain_path = root / domain_id
     if domain_path.is_dir():
         for base in TEMPLATE_DOC_BASES:
-        for ext in TEMPLATE_DOC_EXTENSIONS:
-            candidate = domain_path / f"{base}{ext}"
-            if candidate.is_file():
-                try:
-                    docs = parse_document(str(candidate))
-                    if docs:
-                        return "\n\n".join(d.page_content.strip() for d in docs if d.page_content)
-                except Exception:
-                    continue
+            for ext in TEMPLATE_DOC_EXTENSIONS:
+                candidate = domain_path / f"{base}{ext}"
+                if candidate.is_file():
+                    try:
+                        docs = parse_document(str(candidate))
+                        if docs:
+                            return "\n\n".join(d.page_content.strip() for d in docs if d.page_content)
+                    except Exception:
+                        continue
     # Module-level template (flat or when no template in domain): input/<module>/template.pdf
     for base in TEMPLATE_DOC_BASES:
         for ext in TEMPLATE_DOC_EXTENSIONS:
