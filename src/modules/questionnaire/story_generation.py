@@ -24,11 +24,11 @@ Keypoints (participants' answers; mention count shows how often the point was ra
 {kb_context}
 
 Story structure (follow this pattern exactly):
-- First sentence: Start with "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]."
-- Next 2–4 sentences: Continue in first person or third person as appropriate, describing the participant's experience or view. Weave in the keypoints naturally (e.g. "When ...", "She said that ...", "Globally, ..."). Use "(Location of Session)" only if the session location is relevant.
+- First sentence: Start with "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]." Do not start with "I am" or "I"—always use the (Name) placeholder so the story is attributed to the participant.
+- Next 2–4 sentences: Describe the participant's view in reported form (e.g. "He said that...", "When traveling, she shared that...", "Globally, ..."). Keep the participant's POV but attribute it to (Name), not "I". Use "(Location of Session)" only if relevant.
 - Output: One paragraph only. No headings, no instructions, no meta-commentary—only the story text.
 
-Task: Reply with a single paragraph that follows the structure above. Do not repeat this structure or any instructions in your reply."""
+Task: Reply with a single paragraph that follows the structure above. Do not start with "I" or "I am". Do not repeat this structure or any instructions in your reply."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
