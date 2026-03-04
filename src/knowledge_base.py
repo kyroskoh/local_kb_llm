@@ -162,11 +162,11 @@ class _LlamaChatModel(BaseChatModel):
         return "llama_cpp_chat"
 
 
-def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
+def _create_llm(llm_model_path: str | None = None, max_tokens: int = 512) -> BaseChatModel:
     """Create the chat model: Hugging Face, local GGUF, or OpenAI."""
     path = _resolve_llm_path(llm_model_path)
     if not path:
-        return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
+        return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2, max_tokens=max_tokens)
 
     hf = _parse_hf_spec(path)
     if hf is not None:
@@ -187,7 +187,7 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
                 filename=filename,
                 n_ctx=2048,
             )
-            return _LlamaChatModel(llama_llm=llm, temperature=0.2, max_tokens=512)
+            return _LlamaChatModel(llama_llm=llm, temperature=0.2, max_tokens=max_tokens)
         except Exception as e:
             raise RuntimeError(
                 f"Failed to load Hugging Face model {repo_id!r} (file {filename!r}): {e}. "
@@ -202,10 +202,10 @@ def _create_llm(llm_model_path: str | None = None) -> BaseChatModel:
             model_path=path,
             temperature=0.2,
             n_ctx=2048,
-            max_tokens=512,
+            max_tokens=max_tokens,
             verbose=False,
         )
-    return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2)
+    return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2, max_tokens=max_tokens)
 
 
 class KnowledgeBase:

@@ -15,7 +15,7 @@ from ...knowledge_base import KnowledgeBase, _create_llm
 from .breakout_extract import BreakoutExtract, ThemeBlock, TopicKeypoints
 
 
-STORY_TEMPLATE = """Write one short narrative story for a report, in the style of the training examples. Assume the point of view of a breakout participant; use the theme, question, and keypoints below (and any relevant context) to create a concrete, specific story.
+STORY_TEMPLATE = """Write one short narrative story for a report. Tailor the story to the theme statement and keypoints from this document only. Each document has its own themes and keypoint style—use the Theme, Question, Topic, and Keypoints provided below exactly as given; do not substitute content from other themes or from generic examples.
 
 Theme: {theme_title}
 Question asked: {question}
@@ -24,17 +24,16 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 {keypoints}
 {kb_context}
 
-Story structure (match the pattern in training data; your reply must be only the story—no introduction, no "I am an AI/assistant"):
+Critical: The theme statement above ("{theme_title}" / "{question}") and the keypoints are from this document. Your story must reflect that theme statement and only those keypoints. If training context below describes a different theme or different keypoints, ignore it and use only the Theme, Question, Topic, and Keypoints above. Do not use a generic or canned opening that does not follow from this document's theme and keypoints.
+
+Story structure (your reply must be only the story—no introduction, no "I am an AI/assistant"):
 - One continuous paragraph of prose only. No headings, bullet points, lists, or echoed topic/keypoint labels. Use the literal "(Name)" for the participant (not "He/She"). Use third person only (he/his or she/her for (Name)); never I, me, my, we, our.
 - Length: summarize in at most {max_words} words. Be compact and precise; every sentence must add new information. Do not repeat any phrase, clause, or sentence.
-- Opening (choose one style from training examples):
-  - "(Name) shared of how [topic or theme in a few words]. [Next sentence: He/She shared that... or He/She added that...]"
-  - "(Name), who [brief context e.g. has been living in Singapore for X years], shared that [specific observation]."
-  - "(Name), a [brief role e.g. father of 2], shared his/her experience of how [topic]. He/She shared that [concrete example]."
-- After the opening: 1–3 more sentences with concrete details (e.g. a specific example, number, or situation). Use "He shared that...", "She added that...", "He credited...", "She saw..." as in the training examples. Use "(Location of Session)" only if relevant. Do not repeat the same or similar wording.
-- Training-style example: "(Name) shared of how Singapore is solution-focused. She shared that during Covid-19 she saw the government implement different measures to resolve the situation. She credited Singapore's success to good strategic planning by the leaders." Wrong: "(He/She) shared..."; wrong: listing keypoints; wrong: generic "I am proud"; wrong: repeating words, phrases, or sentences. Right: one paragraph, third person, concrete example, no repetition.
+- Opening: Start with "(Name)" and a phrase that directly reflects the theme statement and keypoints above (e.g. "(Name) shared that [from keypoints]" or "(Name), who [brief context], shared that [from keypoints]."). The opening must align with the theme and keypoints provided, not with a different or generic theme.
+- After the opening: 1–3 more sentences with concrete details drawn only from the keypoints above. Use "He shared that...", "She added that...", "He credited...", "She saw..." as needed. Use "(Location of Session)" only if relevant. Do not repeat the same or similar wording.
+- Wrong: content that does not match the theme statement or keypoints above; listing keypoints verbatim; repeating words or sentences. Right: one paragraph, third person, content taken only from this document's theme and keypoints, no repetition.
 
-Your reply must be exactly one paragraph of prose starting with "(Name)" (e.g. "(Name) shared of how..." or "(Name), who..., shared that..."). No headings, no lists, no echoed keypoints—only the story text. Stay within {max_words} words and do not repeat any phrase or sentence."""
+Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints—only the story text. Stay within {max_words} words. Complete the full story; do not stop mid-sentence."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
@@ -42,28 +41,72 @@ MIN_STORY_LENGTH = 100
 DEFAULT_MAX_STORY_WORDS = 300
 
 
+def _first_n_words(s: str, n: int = 8) -> str:
+    """Normalize and return first n words for fingerprinting (catches near-duplicate sentences)."""
+    words = re.sub(r"\s+", " ", s.lower().strip()).split()
+    return " ".join(words[:n]) if words else ""
+
+
 def _deduplicate_repeated_phrases(text: str) -> str:
-    """Remove consecutive duplicate sentences or long repeated fragments to reduce LLM repetition."""
+    """Remove duplicate and near-duplicate sentences and long repeated phrases to reduce LLM repetition."""
     if not text or len(text) < 50:
         return text
-    # Split on sentence boundaries (period, space, optional quote)
+    # Split on sentence boundaries (period, exclamation, question)
     parts = re.split(r"(?<=[.!?])\s+", text)
     if len(parts) <= 1:
-        return text
-    out: list[str] = [parts[0]]
-    for p in parts[1:]:
+        return _remove_repeated_word_phrases(text)
+    out: list[str] = []
+    seen_fingerprints: set[str] = set()
+    for p in parts:
         s = p.strip()
-        if not s:
+        if not s or len(s) < 10:
             continue
-        # Skip if identical to previous sentence (consecutive duplicate)
-        if out and s == out[-1]:
-            continue
-        # Skip if this sentence is a duplicate of an earlier one (same text already seen)
+        # Skip if identical to an earlier sentence
         if s in out:
             continue
+        # Skip if first 8 words match an earlier sentence (near-duplicate)
+        fp = _first_n_words(s, 8)
+        if fp and fp in seen_fingerprints:
+            continue
+        # Skip if this sentence is a fragment of a longer one we already kept
+        if any(len(kept) > len(s) and s in kept for kept in out):
+            continue
         out.append(s)
+        if fp:
+            seen_fingerprints.add(fp)
     result = " ".join(out).strip()
-    return result if result else text
+    if not result:
+        return text
+    return _remove_repeated_word_phrases(result)
+
+
+def _remove_repeated_word_phrases(text: str, min_phrase_words: int = 10) -> str:
+    """Remove long phrases that repeat; iterate until no change (handles multiple repeats)."""
+    while True:
+        words = text.split()
+        if len(words) < min_phrase_words * 2:
+            break
+        changed = False
+        for n in range(min(min_phrase_words, len(words) // 2), 0, -1):
+            if n >= len(words):
+                continue
+            phrase = " ".join(words[:n])
+            rest = " ".join(words[n:])
+            pos = rest.find(phrase)
+            if pos == -1:
+                continue
+            if pos == 0:
+                result = " ".join(words[:n]) + " " + rest[len(phrase) :].strip()
+            else:
+                result = " ".join(words[:n]) + " " + rest[:pos].strip()
+            new_text = result.strip() if result.strip() else text
+            if new_text != text:
+                text = new_text
+                changed = True
+            break
+        if not changed:
+            break
+    return text
 
 
 def _format_keypoints(topic: TopicKeypoints) -> str:
@@ -206,7 +249,9 @@ async def generate_stories_from_breakout(
     Returns:
         List of StoryResult, one per topic (or up to max_stories).
     """
-    llm = _create_llm(llm_model_path)
+    # Allow enough tokens for max_words (≈2 tokens/word) so the model is not cut off early
+    story_max_tokens = max(512, max_words * 2)
+    llm = _create_llm(llm_model_path, max_tokens=story_max_tokens)
     prompt = PromptTemplate(
         template=STORY_TEMPLATE,
         input_variables=["theme_title", "question", "topic_name", "keypoints", "kb_context", "max_words"],
