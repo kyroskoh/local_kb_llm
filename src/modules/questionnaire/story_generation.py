@@ -39,7 +39,7 @@ Output only the story. Do not output any explanation, meta-commentary, or phrase
 - After the opening: 1–3 more sentences with concrete details drawn only from the keypoints above. Follow the pronoun rule above for referring to (Name). Do not include any location in the story (no place names, no "(Location of Session)", no location phrases). Do not repeat the same or similar wording.
 - Wrong: mixing pronouns for (Name); using I, me, my, we, our, us; including any location or place name; content that does not match the theme statement or keypoints above; listing keypoints verbatim; repeating words or sentences; adding real names or places from any source. Right: one paragraph, one consistent way to refer to (Name) as specified above, content from this document's theme and keypoints only, no location, no other names or places except "(Name)", no repetition.
 
-Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints, no meta-commentary—only the story text. Third person only: never use I, me, my, we, our, or us anywhere in the story. Stay within {max_words} words. Complete the full story; do not stop mid-sentence. Do not write "I am an AI/assistant" or similar."""
+Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints, no meta-commentary—only the story text. Third person only: never use I, me, my, we, our, or us anywhere in the story. Stay within {max_words} words. Important: Write the full paragraph and end with a complete sentence. Do not stop mid-sentence or mid-thought. Do not write "I am an AI/assistant" or similar."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
@@ -319,6 +319,33 @@ def _first_participant_name_from_extract(extract: BreakoutExtract) -> str | None
     return None
 
 
+def _build_prompt_variables(
+    theme: ThemeBlock,
+    topic: TopicKeypoints,
+    topic_index: int,
+    kb: KnowledgeBase | None,
+    domain: str,
+    max_words: int,
+    participant_pronoun: str | None,
+    report_participant_name: str | None,
+) -> dict:
+    """Build the prompt variables dict used for one story. Used for invocation and for writing prompt to file."""
+    keypoints_str = _format_keypoints(topic)
+    kb_context = _resolve_kb_context(kb, theme, topic, domain)
+    example_story_pattern = _format_example_story_pattern(theme)
+    pronoun_instruction = _get_pronoun_instruction(participant_pronoun)
+    return {
+        "theme_title": theme.title,
+        "question": theme.question,
+        "topic_name": topic.name,
+        "keypoints": keypoints_str,
+        "example_story_pattern": example_story_pattern,
+        "kb_context": kb_context,
+        "max_words": max_words,
+        "pronoun_instruction": pronoun_instruction,
+    }
+
+
 async def _generate_one_story(
     chain: object,
     theme: ThemeBlock,
@@ -329,26 +356,23 @@ async def _generate_one_story(
     max_words: int,
     participant_pronoun: str | None = None,
     report_participant_name: str | None = None,
+    write_prompts_to: Path | None = None,
 ) -> StoryResult:
     """Generate a single story for one topic. Replaces (Name) with participant name when available from DOCX."""
-    keypoints_str = _format_keypoints(topic)
-    kb_context = _resolve_kb_context(kb, theme, topic, domain)
-    example_story_pattern = _format_example_story_pattern(theme)
+    prompt_vars = _build_prompt_variables(
+        theme, topic, topic_index, kb, domain, max_words, participant_pronoun, report_participant_name
+    )
+    if write_prompts_to is not None:
+        write_prompts_to.mkdir(parents=True, exist_ok=True)
+        prompt_text = STORY_TEMPLATE.format(**prompt_vars)
+        path = write_prompts_to / f"prompt_theme{theme.theme_number}_topic{topic_index}.txt"
+        path.write_text(prompt_text, encoding="utf-8")
+        logger.info("Wrote prompt for theme %s topic %s to %s", theme.theme_number, topic_index, path)
     participant_name: str | None = report_participant_name
     if participant_name is None and topic_index < len(theme.participant_names):
         participant_name = theme.participant_names[topic_index].strip() or None
-    pronoun_instruction = _get_pronoun_instruction(participant_pronoun)
     try:
-        out = await chain.ainvoke({
-            "theme_title": theme.title,
-            "question": theme.question,
-            "topic_name": topic.name,
-            "keypoints": keypoints_str,
-            "example_story_pattern": example_story_pattern,
-            "kb_context": kb_context,
-            "max_words": max_words,
-            "pronoun_instruction": pronoun_instruction,
-        })
+        out = await chain.ainvoke(prompt_vars)
         text = (out.content if hasattr(out, "content") else str(out)).strip()
         text = _sanitize_story_output(text)
         if len(text) < MIN_STORY_LENGTH:
@@ -397,6 +421,7 @@ async def generate_stories_from_breakout(
     max_stories: int | None = None,
     max_words: int = DEFAULT_MAX_STORY_WORDS,
     participant_pronoun: str | None = None,
+    write_prompts_to: Path | None = None,
 ) -> list[StoryResult]:
     """
     Generate narrative stories from breakout keypoints using the same LLM. Stories are based only on theme and keypoints; the vectordb/KB is not used.
@@ -415,9 +440,10 @@ async def generate_stories_from_breakout(
     Returns:
         List of StoryResult, one per topic (or up to max_stories).
     """
-    # Allow enough tokens so the model can complete the story (avoid mid-sentence cutoff)
-    story_max_tokens = max(1024, max_words * 4)
-    llm = _create_llm(llm_model_path, max_tokens=story_max_tokens)
+    # Allow enough tokens so the model can complete the story (avoid mid-sentence cutoff).
+    # n_ctx must fit prompt + completion; use 4096 so long prompts + 2k completion don't truncate.
+    story_max_tokens = max(2048, max_words * 5)
+    llm = _create_llm(llm_model_path, max_tokens=story_max_tokens, n_ctx=4096)
     prompt = PromptTemplate(
         template=STORY_TEMPLATE,
         input_variables=["theme_title", "question", "topic_name", "keypoints", "example_story_pattern", "kb_context", "max_words", "pronoun_instruction"],
@@ -438,6 +464,7 @@ async def generate_stories_from_breakout(
                 chain, theme, topic, topic_index, kb, domain, max_words,
                 participant_pronoun=participant_pronoun,
                 report_participant_name=report_participant_name,
+                write_prompts_to=write_prompts_to,
             )
             results.append(result)
             count += 1

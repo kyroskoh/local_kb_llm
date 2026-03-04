@@ -11,6 +11,7 @@ Usage:
   python scripts/test_theme_stories.py path/to/report.docx --max 2
   python scripts/test_theme_stories.py path/to/report.docx --theme 1
   python scripts/test_theme_stories.py path/to/report.docx --max-words 60
+  python scripts/test_theme_stories.py path/to/report.docx --write-prompts   # write each theme prompt to output/questionnaire/prompts/
 """
 import asyncio
 import logging
@@ -107,6 +108,9 @@ def _main() -> None:
     max_stories = None
     theme_only = None
     max_words = 130
+    write_prompts_to = None
+    if "--write-prompts" in sys.argv:
+        write_prompts_to = _PROJECT_ROOT / "output" / "questionnaire" / "prompts" / docx_path.stem
     if "--max" in sys.argv:
         idx = sys.argv.index("--max")
         if idx + 1 < len(sys.argv):
@@ -177,6 +181,7 @@ def _main() -> None:
             llm_model_path=llm_model_path,
             max_stories=max_stories,
             max_words=max_words,
+            write_prompts_to=write_prompts_to,
         )
     try:
         stories = asyncio.run(run())
@@ -208,6 +213,8 @@ def _main() -> None:
     out_path = write_stories_to_file(stories, docx_path, module_name="questionnaire")
     print(f"Generated {len(stories)} theme story(ies) (max {max_words} words each).")
     print(f"Output written to: {out_path}")
+    if write_prompts_to is not None:
+        print(f"Prompts written to: {write_prompts_to}")
 
 
 if __name__ == "__main__":

@@ -162,8 +162,14 @@ class _LlamaChatModel(BaseChatModel):
         return "llama_cpp_chat"
 
 
-def _create_llm(llm_model_path: str | None = None, max_tokens: int = 512) -> BaseChatModel:
-    """Create the chat model: Hugging Face, local GGUF, or OpenAI."""
+def _create_llm(
+    llm_model_path: str | None = None,
+    max_tokens: int = 512,
+    n_ctx: int = 2048,
+) -> BaseChatModel:
+    """Create the chat model: Hugging Face, local GGUF, or OpenAI.
+    n_ctx: Context window size for local GGUF (prompt + completion must fit). Use 4096+ for long story prompts.
+    """
     path = _resolve_llm_path(llm_model_path)
     if not path:
         return ChatOpenAI(model=OPENAI_QA_MODEL, temperature=0.2, max_tokens=max_tokens)
@@ -181,11 +187,10 @@ def _create_llm(llm_model_path: str | None = None, max_tokens: int = 512) -> Bas
                 "Install with: pip install -r requirements-llm.txt"
             ) from e
         try:
-            # n_ctx must fit prompt + completion; story prompts can exceed 512 tokens
             llm = Llama.from_pretrained(
                 repo_id=repo_id,
                 filename=filename,
-                n_ctx=2048,
+                n_ctx=n_ctx,
             )
             return _LlamaChatModel(llama_llm=llm, temperature=0.2, max_tokens=max_tokens)
         except Exception as e:
@@ -201,7 +206,7 @@ def _create_llm(llm_model_path: str | None = None, max_tokens: int = 512) -> Bas
         return ChatLlamaCpp(
             model_path=path,
             temperature=0.2,
-            n_ctx=2048,
+            n_ctx=n_ctx,
             max_tokens=max_tokens,
             verbose=False,
         )
