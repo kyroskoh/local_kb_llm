@@ -24,14 +24,14 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 {keypoints}
 {kb_context}
 
-Critical: The theme statement above ("{theme_title}" / "{question}") and the keypoints are from this document. Your story must reflect that theme statement and only those keypoints. If training context below describes a different theme or different keypoints, ignore it and use only the Theme, Question, Topic, and Keypoints above. Do not use a generic or canned opening that does not follow from this document's theme and keypoints.
+Critical: The theme statement above ("{theme_title}" / "{question}") and the keypoints are from this document. Your story must reflect that theme statement and only those keypoints. Do not use any other knowledge: no real names (except the placeholder "(Name)"), no real places (except "(Location of Session)" if needed), no people or locations copied from the training context below. If training context contains names, places, or details not in the keypoints above, ignore it. Base the story only on the Theme, Question, Topic, and Keypoints above.
 
 Output only the story. Do not output any explanation, meta-commentary, or phrases like "I am an AI/assistant". If the theme is implied by the keypoints, write the story—do not comment on whether it was addressed. Story structure:
 - One continuous paragraph of prose only. No headings, bullet points, lists, or echoed topic/keypoint labels. Use the literal "(Name)" for the participant (not "He/She"). Use third person only (he/his or she/her for (Name)); never I, me, my, we, our.
 - Length: summarize in at most {max_words} words. Be compact and precise; every sentence must add new information. Do not repeat any phrase, clause, or sentence.
 - Opening: Start with "(Name)" and a phrase that directly reflects the theme statement and keypoints above (e.g. "(Name) shared that [from keypoints]" or "(Name), who [brief context], shared that [from keypoints]."). The opening must align with the theme and keypoints provided, not with a different or generic theme.
 - After the opening: 1–3 more sentences with concrete details drawn only from the keypoints above. Use "He shared that...", "She added that...", "He credited...", "She saw..." as needed. Use "(Location of Session)" only if relevant. Do not repeat the same or similar wording.
-- Wrong: content that does not match the theme statement or keypoints above; listing keypoints verbatim; repeating words or sentences. Right: one paragraph, third person, content taken only from this document's theme and keypoints, no repetition.
+- Wrong: content that does not match the theme statement or keypoints above; listing keypoints verbatim; repeating words or sentences; adding real names or places (e.g. from training context). Right: one paragraph, third person, content taken only from this document's theme and keypoints, no other names or locations except "(Name)" and "(Location of Session)", no repetition.
 
 Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints, no meta-commentary—only the story text. Stay within {max_words} words. Complete the full story; do not stop mid-sentence. Do not write "I am an AI/assistant" or similar."""
 
@@ -69,8 +69,10 @@ def _sanitize_story_output(text: str) -> str:
     # Collapse multiple newlines and trim each paragraph
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     return " ".join(paragraphs) if paragraphs else text
+
+
 # Default max words for compact, summarized stories (configurable via generate_stories_from_breakout).
-DEFAULT_MAX_STORY_WORDS = 300
+DEFAULT_MAX_STORY_WORDS = 130
 
 
 def _first_n_words(s: str, n: int = 8) -> str:
@@ -277,7 +279,7 @@ async def generate_stories_from_breakout(
         domain: Domain for KB retrieval when using flat layout.
         llm_model_path: Optional LLM path; same semantics as KnowledgeBase.
         max_stories: Cap number of stories (default all topics); use for quick tests.
-        max_words: Maximum word count per story for compact, summarized output (default 300).
+        max_words: Maximum word count per story for compact, summarized output (default 130).
 
     Returns:
         List of StoryResult, one per topic (or up to max_stories).

@@ -98,7 +98,7 @@ def _main() -> None:
     docx_path = Path(sys.argv[1])
     max_stories = None
     theme_only = None
-    max_words = 300
+    max_words = 130
     if "--max" in sys.argv:
         idx = sys.argv.index("--max")
         if idx + 1 < len(sys.argv):
