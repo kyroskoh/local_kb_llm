@@ -7,6 +7,9 @@ env/
 # Chroma DB
 db/
 
+# Generated story output (project root)
+output/
+
 # Input: training data (keep READMEs and *.example.*)
 input/**/*.docx
 input/**/*.pdf

@@ -13,7 +13,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 - **QA**: **Local GGUF by default** (e.g. Qwen2.5-0.5B-Instruct at `models/Qwen2.5-0.5B-Instruct-GGUF.gguf`); configurable via `LLM_MODEL_PATH` or fallback to OpenAI
 - **UI**: NiceGUI chat interface—upload documents, ask questions, and generate questionnaire summaries
 - **Training data (input/)**: Layout is **input/<module>/<domain>/** or flat **input/<module>/** with **domains.json**. Questionnaire template can be JSON or **PDF/DOCX/TXT/EPUB** (same as document_loader). Training data can be flat; the app uses the selected domain as a **query hint** for closest-related retrieval. **Generate and sort** new data with `add_training_text` / `save_training_document` or `add_and_save_training_example`.
-- **Breakout story generation**: Scripts to extract themes/topics/keypoints from report DOCX (Breakout section) and generate short narrative stories (one per topic or per theme). Stories are tailored to each document’s theme statement and keypoints (document-agnostic; each DOCX can have different themes and keypoint style). When gender is unknown, the participant is referred to as **(Name)** only (no pronouns); when gender is known, pass `participant_pronoun="he"` or `"she"` for consistent third-person pronouns. Optional training data for context; participant names from the DOCX replace (Name) when available. Max-word limit (default 130); post-processing removes repeated sentences/phrases and strips meta-commentary (e.g. "Critical:", "Opening:"). Output is written to **src/modules/questionnaire/output/questionnaire/** as **<input_docx_stem>_<timestamp>.txt**.
+- **Breakout story generation**: Scripts to extract themes/topics/keypoints from report DOCX (Breakout section) and generate short narrative stories (one per topic or per theme). Stories are tailored to each document’s theme statement and keypoints (document-agnostic; each DOCX can have different themes and keypoint style). When gender is unknown, the participant is referred to as **(Name)** only (no pronouns); when gender is known, pass `participant_pronoun="he"` or `"she"` for consistent third-person pronouns. Stories are based only on theme and keypoints (vectordb/KB is not used; training data elsewhere is for summarization patterns only, not for names or locations). Participant names from the DOCX replace (Name) when available. Max-word limit (default 130); post-processing removes repeated sentences/phrases and strips meta-commentary (e.g. "Critical:", "Opening:"). Output is written to **output/<module_name>/** at project root (e.g. **output/questionnaire/**) as **<input_docx_stem>_<timestamp>.txt**.
 
 ## Setup
 
@@ -98,7 +98,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 
 7. **Breakout story generation (scripts)**
 
-   From the project root, with training data in `input/questionnaire/` (optional, for story context):
+   From the project root (no vectordb used for stories; theme and keypoints only):
 
    ```bash
    # One story per topic (from Breakout section themes/topics)
@@ -108,7 +108,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
    python scripts/test_theme_stories.py "input/questionnaire/CSS Report_2025_Grp1.docx" [--max N] [--theme N] [--max-words N]
    ```
 
-   Stories use the same LLM and optional KB as the app. Each story is tailored to that document’s theme statement and keypoints (no fixed theme list). When gender is unknown, the participant is referred to as (Name) only; when known, pass `participant_pronoun="he"` or `"she"` to the API for consistent pronouns. Participant names from the DOCX Stories subsection replace (Name) when available. Output is limited to a configurable word count (default 130) and post-processed to remove repeated sentences/phrases and meta-commentary. Results are written to **src/modules/questionnaire/output/questionnaire/** as **<input_docx_stem>_YYYYMMDD_HHMMSS.txt**. See `PRD.md` for scope.
+   Stories use the same LLM; vectordb/KB is not used—stories are based only on theme and keypoints. Each story is tailored to that document’s theme statement and keypoints (no fixed theme list). When gender is unknown, the participant is referred to as (Name) only; when known, pass `participant_pronoun="he"` or `"she"` to the API for consistent pronouns. Participant names from the DOCX Stories subsection replace (Name) when available. Output is limited to a configurable word count (default 130) and post-processed to remove repeated sentences/phrases and meta-commentary. Results are written to **output/questionnaire/** at project root as **<input_docx_stem>_YYYYMMDD_HHMMSS.txt**. See `PRD.md` for scope.
 
 ## Why two example config files in `input/`?
 
@@ -137,6 +137,7 @@ local_kb_llm/
 │   ├── questionnaire/
 │   └── another_module/
 ├── db/                  # Chroma persistence (created at first run)
+├── output/              # Generated story output (e.g. output/questionnaire/*.txt)
 ├── scripts/             # CLI scripts (test_breakout_stories.py, test_theme_stories.py)
 └── src/
     ├── __init__.py
@@ -145,7 +146,7 @@ local_kb_llm/
     ├── input_domains.py    # Discover modules and domains under input/<module>/
     ├── knowledge_base.py   # Chroma (multi-collection per domain) + embeddings + QA chain
     ├── modules/         # Expertise modules (each: input/<module>/<domain>/)
-    │   ├── questionnaire/  # Questionnaire summary; breakout extract + story generation; output/questionnaire/ for .txt results
+    │   ├── questionnaire/  # Questionnaire summary; breakout extract + story generation; output at project root output/<module>/
     │   └── another_module/ # Placeholder
     └── prompts.py       # QA-with-sources prompt
 ```

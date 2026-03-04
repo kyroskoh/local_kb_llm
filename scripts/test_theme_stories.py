@@ -52,6 +52,7 @@ from src.modules.questionnaire import (
     INPUT_SUBDIR,
     extract_breakout_keypoints,
     generate_stories_from_breakout,
+    write_stories_to_file,
 )
 
 QUESTIONNAIRE_INPUT_DIR = DEFAULT_INPUT_DIR / INPUT_SUBDIR
@@ -197,7 +198,9 @@ def _main() -> None:
         print(f"--- Theme #{s.theme_number}: {s.theme_title} | {s.topic_name} ---")
         print(s.story_text)
         print()
+    out_path = write_stories_to_file(stories, docx_path, module_name="questionnaire")
     print(f"Generated {len(stories)} theme story(ies) (max {max_words} words each).")
+    print(f"Output written to: {out_path}")
 
 
 if __name__ == "__main__":

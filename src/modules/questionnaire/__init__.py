@@ -12,6 +12,7 @@ from .breakout_extract import (
 from .story_generation import (
     StoryResult,
     generate_stories_from_breakout,
+    write_stories_to_file,
 )
 from .summary import (
     QuestionnaireSummaryResult,
@@ -33,4 +34,5 @@ __all__ = [
     "generate_stories_from_breakout",
     "generate_summary",
     "QuestionnaireSummaryResult",
+    "write_stories_to_file",
 ]
