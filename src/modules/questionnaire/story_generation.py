@@ -14,7 +14,7 @@ from ...knowledge_base import KnowledgeBase, _create_llm
 from .breakout_extract import BreakoutExtract, ThemeBlock, TopicKeypoints
 
 
-STORY_TEMPLATE = """Assume the point of view of a breakout participant based on the theme, question, and keypoints below. Write one short narrative story for a report.
+STORY_TEMPLATE = """Write one short narrative story for a report, in the style of the training examples. Assume the point of view of a breakout participant; use the theme, question, and keypoints below (and any relevant context) to create a concrete, specific story.
 
 Theme: {theme_title}
 Question asked: {question}
@@ -23,14 +23,16 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 {keypoints}
 {kb_context}
 
-Story structure (your reply must be only this—no introduction, no "I am an AI/assistant", no description of the task):
-- Output format: One continuous paragraph of prose only. No headings, no bullet points, no lists, no line breaks between sentences, no numbers, no repetition of topic names or keypoint labels. Do not echo the keypoints or theme data—weave the ideas into flowing sentences only. Start with the literal "(Name)" (not "He/She").
-- (Name) is the participant (e.g. Lyon). The whole story is about (Name) in the third person. Never use I, me, my, we, or our.
-- First sentence: "(Name) shared about [brief topic summary]." or "(Name) shared of how [brief topic summary]."
-- Next 2–4 sentences: Refer to (Name) with third-person pronouns (he/his or she/her). Use "(Location of Session)" only if relevant. One short paragraph only (2–5 sentences total).
-- Example: "(Name) shared about safety. He said that security is his priority." Wrong: "(He/She) shared..."; wrong: listing keypoints or topic names. Right: one block of prose.
+Story structure (match the pattern in training data; your reply must be only the story—no introduction, no "I am an AI/assistant"):
+- One continuous paragraph of prose only. No headings, bullet points, lists, or echoed topic/keypoint labels. Use the literal "(Name)" for the participant (not "He/She"). Use third person only (he/his or she/her for (Name)); never I, me, my, we, our.
+- Opening (choose one style from training examples):
+  - "(Name) shared of how [topic or theme in a few words]. [Next sentence: He/She shared that... or He/She added that...]"
+  - "(Name), who [brief context e.g. has been living in Singapore for X years], shared that [specific observation]."
+  - "(Name), a [brief role e.g. father of 2], shared his/her experience of how [topic]. He/She shared that [concrete example]."
+- After the opening: 1–3 more sentences with concrete details (e.g. a specific example, number, or situation). Use "He shared that...", "She added that...", "He credited...", "She saw..." as in the training examples. Use "(Location of Session)" only if relevant.
+- Training-style example: "(Name) shared of how Singapore is solution-focused. She shared that during Covid-19 she saw the government implement different measures to resolve the situation. She credited Singapore's success to good strategic planning by the leaders." Wrong: "(He/She) shared..."; wrong: listing keypoints; wrong: generic "I am proud". Right: one paragraph, third person, concrete example.
 
-Your reply must be exactly one paragraph of prose, starting with "(Name) shared about" or "(Name) shared of how". No headings, no lists, no echoed keypoints—only the story text."""
+Your reply must be exactly one paragraph of prose starting with "(Name)" (e.g. "(Name) shared of how..." or "(Name), who..., shared that..."). No headings, no lists, no echoed keypoints—only the story text."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
