@@ -24,6 +24,10 @@ Question asked: {question}
 Topic (category): {topic_name}
 Keypoints (participants' answers; mention count = how often raised—use for emphasis):
 {keypoints}
+
+Example story pattern(s) from this document (follow this style and structure when writing the new story):
+{example_story_pattern}
+
 {kb_context}
 
 Critical: The theme statement above ("{theme_title}" / "{question}") and the keypoints are from this document. Your story must reflect that theme statement and only those keypoints. Base the story only on the Theme, Question, Topic, and Keypoints above. Do not use any other knowledge: no real names (except the placeholder "(Name)"), no place names or location in the story—do not include any location (no "(Location: ...)", no real places). Do not invent or copy names, locations, or people from anywhere else.
@@ -55,10 +59,10 @@ def _sanitize_story_output(text: str) -> str:
     text = re.sub(r'\s+credited\s*:\s*["\']?\s*', " ", text, flags=re.IGNORECASE)
     text = re.sub(r'\s*["\']\s*$', "", text)
     text = re.sub(r"\s+", " ", text).strip()
-    # Truncate at meta-commentary blocks: "Critical: This theme...", "The key points are:", "Opening:", "After the opening:"
+    # Truncate only at clear meta-commentary (not narrative "critical"); avoid cutting story mid-sentence
     for marker in (
         r"\s+Critical:\s+This theme",
-        r"\s+Critical:\s+",
+        r"\s+Critical:\s+The key points",
         r"\s+The key points are:",
         r"\s+Opening:",
         r"\s+After the opening:",
@@ -209,6 +213,37 @@ def _format_keypoints(topic: TopicKeypoints) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+def _sanitize_example_story(text: str, participant_names: list[str]) -> str:
+    """Normalize example story for prompt: use (Name), no location, trim."""
+    if not text or not text.strip():
+        return ""
+    t = text.strip()
+    for name in participant_names:
+        if name and name.strip():
+            t = re.sub(re.escape(name.strip()), "(Name)", t, flags=re.IGNORECASE)
+    t = re.sub(r'\(Location(?:\s+of\s+Session)?(?:\s*:\s*[^)"\']*)?\)', " ", t, flags=re.IGNORECASE)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _format_example_story_pattern(theme: ThemeBlock) -> str:
+    """Format up to 2 example story paragraphs from this theme for prompt tailoring. Empty if none."""
+    paragraphs = getattr(theme, "story_paragraphs", None) or []
+    if not paragraphs:
+        return "(No example stories from this document.)"
+    names = getattr(theme, "participant_names", None) or []
+    sanitized: list[str] = []
+    for i, p in enumerate(paragraphs[:2]):
+        if not p or not p.strip():
+            continue
+        s = _sanitize_example_story(p, names)
+        if s:
+            sanitized.append(f"Example {len(sanitized) + 1}: {s}")
+    if not sanitized:
+        return "(No example stories from this document.)"
+    return "\n\n".join(sanitized)
+
+
 def _get_pronoun_instruction(participant_pronoun: str | None) -> str:
     """Return prompt instruction for referring to (Name). When gender is unknown, use (Name) only; when known, use he or she consistently."""
     if participant_pronoun == "he":
@@ -275,6 +310,15 @@ def _resolve_kb_context(
     return _STORY_CONTEXT_NO_KB
 
 
+def _first_participant_name_from_extract(extract: BreakoutExtract) -> str | None:
+    """Return the first non-empty participant name from any theme so one name is used for the whole report."""
+    for theme in extract.themes:
+        for name in theme.participant_names:
+            if name and name.strip():
+                return name.strip()
+    return None
+
+
 async def _generate_one_story(
     chain: object,
     theme: ThemeBlock,
@@ -284,12 +328,14 @@ async def _generate_one_story(
     domain: str,
     max_words: int,
     participant_pronoun: str | None = None,
+    report_participant_name: str | None = None,
 ) -> StoryResult:
     """Generate a single story for one topic. Replaces (Name) with participant name when available from DOCX."""
     keypoints_str = _format_keypoints(topic)
     kb_context = _resolve_kb_context(kb, theme, topic, domain)
-    participant_name: str | None = None
-    if topic_index < len(theme.participant_names):
+    example_story_pattern = _format_example_story_pattern(theme)
+    participant_name: str | None = report_participant_name
+    if participant_name is None and topic_index < len(theme.participant_names):
         participant_name = theme.participant_names[topic_index].strip() or None
     pronoun_instruction = _get_pronoun_instruction(participant_pronoun)
     try:
@@ -298,6 +344,7 @@ async def _generate_one_story(
             "question": theme.question,
             "topic_name": topic.name,
             "keypoints": keypoints_str,
+            "example_story_pattern": example_story_pattern,
             "kb_context": kb_context,
             "max_words": max_words,
             "pronoun_instruction": pronoun_instruction,
@@ -368,14 +415,15 @@ async def generate_stories_from_breakout(
     Returns:
         List of StoryResult, one per topic (or up to max_stories).
     """
-    # Allow enough tokens for max_words (≈2 tokens/word) so the model is not cut off early
-    story_max_tokens = max(512, max_words * 2)
+    # Allow enough tokens so the model can complete the story (avoid mid-sentence cutoff)
+    story_max_tokens = max(1024, max_words * 4)
     llm = _create_llm(llm_model_path, max_tokens=story_max_tokens)
     prompt = PromptTemplate(
         template=STORY_TEMPLATE,
-        input_variables=["theme_title", "question", "topic_name", "keypoints", "kb_context", "max_words", "pronoun_instruction"],
+        input_variables=["theme_title", "question", "topic_name", "keypoints", "example_story_pattern", "kb_context", "max_words", "pronoun_instruction"],
     )
     chain = prompt | llm
+    report_participant_name = _first_participant_name_from_extract(extract)
     results: list[StoryResult] = []
     count = 0
     for theme in extract.themes:
@@ -389,6 +437,7 @@ async def generate_stories_from_breakout(
             result = await _generate_one_story(
                 chain, theme, topic, topic_index, kb, domain, max_words,
                 participant_pronoun=participant_pronoun,
+                report_participant_name=report_participant_name,
             )
             results.append(result)
             count += 1

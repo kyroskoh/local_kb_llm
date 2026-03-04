@@ -84,7 +84,14 @@ def _extract_to_one_story_per_theme(extract: BreakoutExtract) -> BreakoutExtract
             keypoints.extend(top.keypoints)
         topic = TopicKeypoints(name=t.title, keypoints=keypoints, mentions=None)
         themes_one.append(
-            ThemeBlock(theme_number=t.theme_number, title=t.title, question=t.question, topics=[topic])
+            ThemeBlock(
+                theme_number=t.theme_number,
+                title=t.title,
+                question=t.question,
+                topics=[topic],
+                participant_names=t.participant_names,
+                story_paragraphs=t.story_paragraphs,
+            )
         )
     return BreakoutExtract(themes=themes_one)
 
