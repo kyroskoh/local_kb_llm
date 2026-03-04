@@ -37,15 +37,15 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 - Document ingestion: PDF, DOCX, TXT, EPUB (via LangChain).
 - Vector store: Chroma with persistent storage; multi-collection per domain when domain-based.
 - QA: Local GGUF (e.g. Qwen2.5) or OpenAI; answers cite sources or say “I don’t know” when not in context.
-- **Questionnaire module**: Summarize filled questionnaires (agreed + background) using module training data; support template as JSON or PDF/DOCX/TXT/EPUB.
+- **Questionnaire module**: Summarize filled questionnaires (agreed + background) using module training data; support template as JSON or PDF/DOCX/TXT/EPUB. **Breakout story generation**: Extract themes, questions, topics, and keypoints from the Breakout Group Discussion section of report DOCX; generate short narrative stories per topic (or per theme) using the same LLM and optional training data; participant names from the DOCX Stories subsection replace the (Name) placeholder when available; stories are constrained by max words (default 300) and post-processed to remove repeated sentences and phrases.
 - **Input layout**: `input/<module>/<domain>/` (domain-based) or flat `input/<module>/` with optional `domains.json` for domain labels.
 - **Closest-related retrieval**: When data is flat, selected domain is used as a query hint so retrieval is domain-biased.
 - **Add/sort training data**: API to add new text to a domain and optionally save it under `input/<module>/<domain>/`.
+- **Embeddings**: OpenAI or local (sentence-transformers) via `EMBEDDING_MODEL` in `.env`.
 - Web UI: NiceGUI (Chat + Questionnaire summary, domain selectors, load training data).
 
 ### Out of scope (current)
 
-- Local embeddings (embeddings stay OpenAI).
 - Authentication / multi-tenancy.
 - Other modules beyond questionnaire (structure is ready; implementation is placeholder).
 
@@ -89,6 +89,7 @@ Training data lives under **input/** and is organized by **module** and optional
 - Use module training data (and optional template doc) as context; respect selected domain (collection or query hint).
 - Support template as JSON (field list) or as a document (PDF/DOCX/TXT/EPUB).
 - “Use template” in UI: load empty template fields for the selected domain so the user can fill and generate.
+- **Breakout story generation**: Parse report DOCX Breakout section into themes, questions, topics, and keypoints; optionally parse participant names from the Stories subsection; generate one narrative story per topic (or one per theme when aggregated) with max-word limit and repetition removed in post-processing; (Name) placeholder replaced by parsed participant name when available.
 
 ### 5.3 Training data and domains
 

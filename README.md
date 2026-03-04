@@ -13,6 +13,7 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 - **QA**: **Local GGUF by default** (e.g. Qwen2.5-0.5B-Instruct at `models/Qwen2.5-0.5B-Instruct-GGUF.gguf`); configurable via `LLM_MODEL_PATH` or fallback to OpenAI
 - **UI**: NiceGUI chat interface—upload documents, ask questions, and generate questionnaire summaries
 - **Training data (input/)**: Layout is **input/<module>/<domain>/** or flat **input/<module>/** with **domains.json**. Questionnaire template can be JSON or **PDF/DOCX/TXT/EPUB** (same as document_loader). Training data can be flat; the app uses the selected domain as a **query hint** for closest-related retrieval. **Generate and sort** new data with `add_training_text` / `save_training_document` or `add_and_save_training_example`.
+- **Breakout story generation**: Scripts to extract themes/topics/keypoints from report DOCX (Breakout section) and generate short narrative stories (one per topic or per theme), with optional training data for context, participant names from the DOCX replacing (Name), max-word limit (default 300), and post-processing to remove repeated sentences/phrases.
 
 ## Setup
 
@@ -95,6 +96,20 @@ Inspired by [Build Local Knowledge Base Using LLMs](https://cellsummer.github.io
 
    - In the Chat tab, after the first upload, an **Add another document** control appears so you can extend the knowledge base.
 
+7. **Breakout story generation (scripts)**
+
+   From the project root, with training data in `input/questionnaire/` (optional, for story context):
+
+   ```bash
+   # One story per topic (from Breakout section themes/topics)
+   python scripts/test_breakout_stories.py "input/questionnaire/CSS Report_2025_Grp1.docx" [--max N] [--theme N] [--max-words N]
+
+   # One story per theme (topics aggregated per theme)
+   python scripts/test_theme_stories.py "input/questionnaire/CSS Report_2025_Grp1.docx" [--max N] [--theme N] [--max-words N]
+   ```
+
+   Stories use the same LLM and optional KB as the app. Participant names are read from the DOCX Stories subsection when present and replace the (Name) placeholder. Output is limited to a configurable word count (default 300) and post-processed to remove repeated sentences and phrases. See `PRD.md` for scope.
+
 ## Why two example config files in `input/`?
 
 | File | Purpose | When to use |
@@ -122,6 +137,7 @@ local_kb_llm/
 │   ├── questionnaire/
 │   └── another_module/
 ├── db/                  # Chroma persistence (created at first run)
+├── scripts/             # CLI scripts (test_breakout_stories.py, test_theme_stories.py)
 └── src/
     ├── __init__.py
     ├── app.py           # NiceGUI chat UI
@@ -129,7 +145,7 @@ local_kb_llm/
     ├── input_domains.py    # Discover modules and domains under input/<module>/
     ├── knowledge_base.py   # Chroma (multi-collection per domain) + embeddings + QA chain
     ├── modules/         # Expertise modules (each: input/<module>/<domain>/)
-    │   ├── questionnaire/  # Questionnaire summary (agreed + background)
+    │   ├── questionnaire/  # Questionnaire summary; breakout extract + story generation
     │   └── another_module/ # Placeholder
     └── prompts.py       # QA-with-sources prompt
 ```
