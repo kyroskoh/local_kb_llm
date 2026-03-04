@@ -26,17 +26,49 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 
 Critical: The theme statement above ("{theme_title}" / "{question}") and the keypoints are from this document. Your story must reflect that theme statement and only those keypoints. If training context below describes a different theme or different keypoints, ignore it and use only the Theme, Question, Topic, and Keypoints above. Do not use a generic or canned opening that does not follow from this document's theme and keypoints.
 
-Story structure (your reply must be only the story—no introduction, no "I am an AI/assistant"):
+Output only the story. Do not output any explanation, meta-commentary, or phrases like "I am an AI/assistant". If the theme is implied by the keypoints, write the story—do not comment on whether it was addressed. Story structure:
 - One continuous paragraph of prose only. No headings, bullet points, lists, or echoed topic/keypoint labels. Use the literal "(Name)" for the participant (not "He/She"). Use third person only (he/his or she/her for (Name)); never I, me, my, we, our.
 - Length: summarize in at most {max_words} words. Be compact and precise; every sentence must add new information. Do not repeat any phrase, clause, or sentence.
 - Opening: Start with "(Name)" and a phrase that directly reflects the theme statement and keypoints above (e.g. "(Name) shared that [from keypoints]" or "(Name), who [brief context], shared that [from keypoints]."). The opening must align with the theme and keypoints provided, not with a different or generic theme.
 - After the opening: 1–3 more sentences with concrete details drawn only from the keypoints above. Use "He shared that...", "She added that...", "He credited...", "She saw..." as needed. Use "(Location of Session)" only if relevant. Do not repeat the same or similar wording.
 - Wrong: content that does not match the theme statement or keypoints above; listing keypoints verbatim; repeating words or sentences. Right: one paragraph, third person, content taken only from this document's theme and keypoints, no repetition.
 
-Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints—only the story text. Stay within {max_words} words. Complete the full story; do not stop mid-sentence."""
+Your reply must be exactly one paragraph of prose starting with "(Name)". No headings, no lists, no echoed keypoints, no meta-commentary—only the story text. Stay within {max_words} words. Complete the full story; do not stop mid-sentence. Do not write "I am an AI/assistant" or similar."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
+
+
+def _sanitize_story_output(text: str) -> str:
+    """Remove model meta-output: 'I am an AI/assistant', meta-commentary, and literal placeholders."""
+    if not text:
+        return text
+    # Remove literal placeholder if model echoed it
+    text = text.replace("[from keypoints]", "").strip()
+    lines = text.split("\n")
+    out: list[str] = []
+    skip_until_next_paragraph = False
+    for line in lines:
+        stripped = line.strip()
+        # Drop lines that are only "I am an AI/assistant" or close variants
+        if re.match(r"^[\"']?I\s+am\s+(an\s+)?(AI|language\s+model)(\s*/\s*assistant)?[\"']?\.?$", stripped, re.IGNORECASE):
+            continue
+        # Drop paragraph that starts with meta-commentary (e.g. "However, critical:" ... "Therefore, I will use...")
+        if "However, critical:" in stripped or "Therefore, I will use a generic opening" in stripped:
+            skip_until_next_paragraph = True
+            continue
+        if skip_until_next_paragraph:
+            if not stripped:
+                skip_until_next_paragraph = False
+            continue
+        # Drop line that is only meta (training context / not directly addressed)
+        if stripped and ("was not directly addressed by this document's training" in stripped or "not explicitly stated" in stripped) and len(stripped) < 200:
+            continue
+        out.append(line)
+    text = "\n".join(out).strip()
+    # Collapse multiple newlines and trim each paragraph
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    return " ".join(paragraphs) if paragraphs else text
 # Default max words for compact, summarized stories (configurable via generate_stories_from_breakout).
 DEFAULT_MAX_STORY_WORDS = 300
 
@@ -189,6 +221,7 @@ async def _generate_one_story(
             "max_words": max_words,
         })
         text = (out.content if hasattr(out, "content") else str(out)).strip()
+        text = _sanitize_story_output(text)
         if len(text) < MIN_STORY_LENGTH:
             logger.warning(
                 "Story too short (%d chars) for theme %s topic %s; treating as failed.",
