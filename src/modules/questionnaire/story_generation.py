@@ -3,6 +3,7 @@ Generate short narrative stories from Breakout Group Discussion keypoints.
 Uses the same LLM and optional KB (training data) as the questionnaire module.
 """
 import logging
+import re
 from dataclasses import dataclass
 
 from langchain_core.prompts import PromptTemplate
@@ -25,17 +26,44 @@ Keypoints (participants' answers; mention count = how often raised—use for emp
 
 Story structure (match the pattern in training data; your reply must be only the story—no introduction, no "I am an AI/assistant"):
 - One continuous paragraph of prose only. No headings, bullet points, lists, or echoed topic/keypoint labels. Use the literal "(Name)" for the participant (not "He/She"). Use third person only (he/his or she/her for (Name)); never I, me, my, we, our.
+- Length: summarize in at most {max_words} words. Be compact and precise; every sentence must add new information. Do not repeat any phrase, clause, or sentence.
 - Opening (choose one style from training examples):
   - "(Name) shared of how [topic or theme in a few words]. [Next sentence: He/She shared that... or He/She added that...]"
   - "(Name), who [brief context e.g. has been living in Singapore for X years], shared that [specific observation]."
   - "(Name), a [brief role e.g. father of 2], shared his/her experience of how [topic]. He/She shared that [concrete example]."
-- After the opening: 1–3 more sentences with concrete details (e.g. a specific example, number, or situation). Use "He shared that...", "She added that...", "He credited...", "She saw..." as in the training examples. Use "(Location of Session)" only if relevant.
-- Training-style example: "(Name) shared of how Singapore is solution-focused. She shared that during Covid-19 she saw the government implement different measures to resolve the situation. She credited Singapore's success to good strategic planning by the leaders." Wrong: "(He/She) shared..."; wrong: listing keypoints; wrong: generic "I am proud". Right: one paragraph, third person, concrete example.
+- After the opening: 1–3 more sentences with concrete details (e.g. a specific example, number, or situation). Use "He shared that...", "She added that...", "He credited...", "She saw..." as in the training examples. Use "(Location of Session)" only if relevant. Do not repeat the same or similar wording.
+- Training-style example: "(Name) shared of how Singapore is solution-focused. She shared that during Covid-19 she saw the government implement different measures to resolve the situation. She credited Singapore's success to good strategic planning by the leaders." Wrong: "(He/She) shared..."; wrong: listing keypoints; wrong: generic "I am proud"; wrong: repeating words, phrases, or sentences. Right: one paragraph, third person, concrete example, no repetition.
 
-Your reply must be exactly one paragraph of prose starting with "(Name)" (e.g. "(Name) shared of how..." or "(Name), who..., shared that..."). No headings, no lists, no echoed keypoints—only the story text."""
+Your reply must be exactly one paragraph of prose starting with "(Name)" (e.g. "(Name) shared of how..." or "(Name), who..., shared that..."). No headings, no lists, no echoed keypoints—only the story text. Stay within {max_words} words and do not repeat any phrase or sentence."""
 
 # Minimum length for a valid story; shorter output is treated as failed (e.g. small models often emit EOS after 1–2 tokens).
 MIN_STORY_LENGTH = 100
+# Default max words for compact, summarized stories (configurable via generate_stories_from_breakout).
+DEFAULT_MAX_STORY_WORDS = 300
+
+
+def _deduplicate_repeated_phrases(text: str) -> str:
+    """Remove consecutive duplicate sentences or long repeated fragments to reduce LLM repetition."""
+    if not text or len(text) < 50:
+        return text
+    # Split on sentence boundaries (period, space, optional quote)
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    if len(parts) <= 1:
+        return text
+    out: list[str] = [parts[0]]
+    for p in parts[1:]:
+        s = p.strip()
+        if not s:
+            continue
+        # Skip if identical to previous sentence (consecutive duplicate)
+        if out and s == out[-1]:
+            continue
+        # Skip if this sentence is a duplicate of an earlier one (same text already seen)
+        if s in out:
+            continue
+        out.append(s)
+    result = " ".join(out).strip()
+    return result if result else text
 
 
 def _format_keypoints(topic: TopicKeypoints) -> str:
@@ -97,12 +125,17 @@ async def _generate_one_story(
     chain: object,
     theme: ThemeBlock,
     topic: TopicKeypoints,
+    topic_index: int,
     kb: KnowledgeBase | None,
     domain: str,
+    max_words: int,
 ) -> StoryResult:
-    """Generate a single story for one topic."""
+    """Generate a single story for one topic. Replaces (Name) with participant name when available from DOCX."""
     keypoints_str = _format_keypoints(topic)
     kb_context = _resolve_kb_context(kb, theme, topic, domain)
+    participant_name: str | None = None
+    if topic_index < len(theme.participant_names):
+        participant_name = theme.participant_names[topic_index].strip() or None
     try:
         out = await chain.ainvoke({
             "theme_title": theme.title,
@@ -110,6 +143,7 @@ async def _generate_one_story(
             "topic_name": topic.name,
             "keypoints": keypoints_str,
             "kb_context": kb_context,
+            "max_words": max_words,
         })
         text = (out.content if hasattr(out, "content") else str(out)).strip()
         if len(text) < MIN_STORY_LENGTH:
@@ -125,6 +159,9 @@ async def _generate_one_story(
                 topic_name=topic.name,
                 story_text="[Story generation failed.]",
             )
+        text = _deduplicate_repeated_phrases(text)
+        if participant_name:
+            text = text.replace("(Name)", participant_name)
         return StoryResult(
             theme_number=theme.theme_number,
             theme_title=theme.title,
@@ -153,6 +190,7 @@ async def generate_stories_from_breakout(
     domain: str = "",
     llm_model_path: str | None = None,
     max_stories: int | None = None,
+    max_words: int = DEFAULT_MAX_STORY_WORDS,
 ) -> list[StoryResult]:
     """
     Generate narrative stories from breakout keypoints using the same trained data (KB) and LLM.
@@ -163,6 +201,7 @@ async def generate_stories_from_breakout(
         domain: Domain for KB retrieval when using flat layout.
         llm_model_path: Optional LLM path; same semantics as KnowledgeBase.
         max_stories: Cap number of stories (default all topics); use for quick tests.
+        max_words: Maximum word count per story for compact, summarized output (default 300).
 
     Returns:
         List of StoryResult, one per topic (or up to max_stories).
@@ -170,7 +209,7 @@ async def generate_stories_from_breakout(
     llm = _create_llm(llm_model_path)
     prompt = PromptTemplate(
         template=STORY_TEMPLATE,
-        input_variables=["theme_title", "question", "topic_name", "keypoints", "kb_context"],
+        input_variables=["theme_title", "question", "topic_name", "keypoints", "kb_context", "max_words"],
     )
     chain = prompt | llm
     results: list[StoryResult] = []
@@ -180,10 +219,10 @@ async def generate_stories_from_breakout(
         if not topics:
             # Fallback: no numbered topics parsed (e.g. DOCX format differs); generate one story per theme
             topics = [TopicKeypoints(name=theme.title, keypoints=[theme.question] if theme.question else [])]
-        for topic in topics:
+        for topic_index, topic in enumerate(topics):
             if max_stories is not None and count >= max_stories:
                 return results
-            result = await _generate_one_story(chain, theme, topic, kb, domain)
+            result = await _generate_one_story(chain, theme, topic, topic_index, kb, domain, max_words)
             results.append(result)
             count += 1
     return results

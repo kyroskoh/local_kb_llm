@@ -10,6 +10,7 @@ Usage:
   python scripts/test_theme_stories.py "input/questionnaire/CSS Report_2025_10_01_Grp 1 Lyon.docx"
   python scripts/test_theme_stories.py path/to/report.docx --max 2
   python scripts/test_theme_stories.py path/to/report.docx --theme 1
+  python scripts/test_theme_stories.py path/to/report.docx --max-words 60
 """
 import asyncio
 import logging
@@ -97,11 +98,19 @@ def _main() -> None:
     docx_path = Path(sys.argv[1])
     max_stories = None
     theme_only = None
+    max_words = 300
     if "--max" in sys.argv:
         idx = sys.argv.index("--max")
         if idx + 1 < len(sys.argv):
             try:
                 max_stories = int(sys.argv[idx + 1])
+            except ValueError:
+                pass
+    if "--max-words" in sys.argv:
+        idx = sys.argv.index("--max-words")
+        if idx + 1 < len(sys.argv):
+            try:
+                max_words = int(sys.argv[idx + 1])
             except ValueError:
                 pass
     if "--theme" in sys.argv:
@@ -154,7 +163,12 @@ def _main() -> None:
         kb = None
     async def run() -> list:
         return await generate_stories_from_breakout(
-            extract, kb=kb, domain="", llm_model_path=llm_model_path, max_stories=max_stories
+            extract,
+            kb=kb,
+            domain="",
+            llm_model_path=llm_model_path,
+            max_stories=max_stories,
+            max_words=max_words,
         )
     try:
         stories = asyncio.run(run())
@@ -183,7 +197,7 @@ def _main() -> None:
         print(f"--- Theme #{s.theme_number}: {s.theme_title} | {s.topic_name} ---")
         print(s.story_text)
         print()
-    print(f"Generated {len(stories)} theme story(ies).")
+    print(f"Generated {len(stories)} theme story(ies) (max {max_words} words each).")
 
 
 if __name__ == "__main__":

@@ -32,12 +32,13 @@ class TopicKeypoints:
 
 @dataclass
 class ThemeBlock:
-    """One theme: title, question, and list of topics with keypoints."""
+    """One theme: title, question, list of topics with keypoints, and optional participant names from Stories section."""
 
     theme_number: int
     title: str
     question: str
     topics: list[TopicKeypoints] = field(default_factory=list)
+    participant_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -63,6 +64,7 @@ class BreakoutExtract:
                         }
                         for p in t.topics
                     ],
+                    "participant_names": t.participant_names,
                 }
                 for t in self.themes
             ],
@@ -76,6 +78,30 @@ def _load_docx_text(path: str | Path) -> str:
     if not docs:
         return ""
     return docs[0].page_content if hasattr(docs[0], "page_content") else str(docs[0])
+
+
+def _extract_story_names_from_theme_block(block_text: str) -> list[str]:
+    """
+    Parse the Stories subsection: number, story paragraph, name line, location line, repeated.
+    Return list of participant name lines in order (one per story).
+    """
+    idx = block_text.lower().find("stories:")
+    if idx == -1:
+        return []
+    after_stories = block_text[idx + len("stories:") :].strip()
+    if not after_stories:
+        return []
+    segments = [s.strip() for s in re.split(r"\n\s*\n", after_stories) if s.strip()]
+    names: list[str] = []
+    # Pattern: digit, story, name, location, digit, story, name, location, ...
+    for k in range(len(segments) // 4):
+        i = 2 + 4 * k
+        if i < len(segments):
+            candidate = segments[i]
+            # Name line is short and not a single digit
+            if candidate and not re.match(r"^\d+$", candidate) and len(candidate) <= 120:
+                names.append(candidate)
+    return names
 
 
 def _find_breakout_section(full_text: str) -> str:
@@ -168,6 +194,13 @@ def _parse_breakout_section(section_text: str) -> BreakoutExtract:
         if current_topic is not None:
             current_theme.topics.append(current_topic)
         result.themes.append(current_theme)
+
+    # Second pass: parse participant names from each theme's Stories subsection
+    theme_blocks = re.split(r"\n\s*Theme\s*#\s*\d+", section_text, flags=re.IGNORECASE)
+    for i, theme in enumerate(result.themes):
+        block_index = i + 1
+        if block_index < len(theme_blocks):
+            theme.participant_names = _extract_story_names_from_theme_block(theme_blocks[block_index])
 
     return result
 
