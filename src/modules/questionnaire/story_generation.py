@@ -140,6 +140,20 @@ def _first_n_words(s: str, n: int = 8) -> str:
     return " ".join(words[:n]) if words else ""
 
 
+def _truncate_to_max_words(text: str, max_words: int) -> str:
+    """Return text truncated to at most max_words. Ends at a word boundary; prefers ending at a sentence."""
+    if not text or max_words <= 0:
+        return text
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    truncated = " ".join(words[:max_words])
+    last_sentence = max(truncated.rfind(". "), truncated.rfind("! "), truncated.rfind("? "))
+    if last_sentence > len(truncated) // 2:
+        return truncated[: last_sentence + 1].strip()
+    return truncated.strip()
+
+
 def _deduplicate_repeated_phrases(text: str) -> str:
     """Remove duplicate and near-duplicate sentences and long repeated phrases to reduce LLM repetition."""
     if not text or len(text) < 50:
@@ -389,6 +403,7 @@ async def _generate_one_story(
                 story_text="[Story generation failed.]",
             )
         text = _deduplicate_repeated_phrases(text)
+        text = _truncate_to_max_words(text, max_words)
         if participant_name:
             text = text.replace("(Name)", participant_name)
         return StoryResult(
